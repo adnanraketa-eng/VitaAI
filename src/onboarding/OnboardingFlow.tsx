@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { OnboardingData, PrimaryGoalType, ActivityLevelType } from './OnboardingTypes';
 import { OnboardingRepository } from './OnboardingRepository';
+import { supabase } from '../core/supabase';
 import { OnboardingWelcomeScreen } from './screens/OnboardingWelcomeScreen';
 import { OnboardingPersonalDetailsScreen } from './screens/OnboardingPersonalDetailsScreen';
 import { OnboardingHealthProfileScreen } from './screens/OnboardingHealthProfileScreen';
@@ -30,13 +31,14 @@ export function OnboardingFlow({ onComplete }: Props) {
   // 9: Complete
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Initialize from any saved draft or sensible baseline
   const [formData, setFormData] = useState<OnboardingData>(() => {
     const draft = OnboardingRepository.getOnboardingDraft();
     return {
-      fullName: draft?.fullName || 'Maya Patel',
-      email: draft?.email || 'maya.patel@email.com',
+      fullName: draft?.fullName || '',
+      email: draft?.email || '',
       dob: draft?.dob || '1992-09-14',
       age: draft?.age || 32,
       gender: draft?.gender || 'Woman',
@@ -68,6 +70,20 @@ export function OnboardingFlow({ onComplete }: Props) {
       },
     };
   });
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: authData }) => {
+      if (authData?.user) {
+        setFormData((prev) => ({
+          ...prev,
+          email: prev.email || authData.user.email || '',
+          fullName: prev.fullName || authData.user.user_metadata?.full_name || '',
+        }));
+      }
+    }).catch(() => {
+      // Non-blocking if session is unauthenticated on initial load
+    });
+  }, []);
 
   const updateFormData = (patch: Partial<OnboardingData>) => {
     setFormData((prev) => {
@@ -126,12 +142,18 @@ export function OnboardingFlow({ onComplete }: Props) {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      // Persist final onboarding completion
-      OnboardingRepository.completeOnboarding(formData);
+      // Persist final onboarding completion to real authenticated Supabase backend
+      await OnboardingRepository.completeOnboarding(formData);
       setCurrentStep(9);
     } catch (e) {
-      console.error('Error completing onboarding', e);
+      const message =
+        e instanceof Error
+          ? e.message
+          : 'An unexpected error occurred while saving your profile to Supabase. Please try again.';
+      console.error('Error completing onboarding:', message);
+      setSubmitError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -261,10 +283,17 @@ export function OnboardingFlow({ onComplete }: Props) {
       {currentStep === 8 && (
         <OnboardingReviewScreen
           data={formData}
-          onEditSection={(stepNum) => setCurrentStep(stepNum)}
+          onEditSection={(stepNum) => {
+            setSubmitError(null);
+            setCurrentStep(stepNum);
+          }}
           onSubmit={handleSubmit}
-          onBack={() => setCurrentStep(7)}
+          onBack={() => {
+            setSubmitError(null);
+            setCurrentStep(7);
+          }}
           isSubmitting={isSubmitting}
+          errorMessage={submitError}
         />
       )}
 

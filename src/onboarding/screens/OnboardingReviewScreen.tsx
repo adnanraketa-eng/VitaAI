@@ -1,4 +1,4 @@
-import { User, Scale, Target, Activity, Utensils, Edit3, ShieldCheck } from 'lucide-react';
+import { User, Scale, Target, Activity, Utensils, Edit3, ShieldCheck, AlertCircle } from 'lucide-react';
 import { 
   OnboardingScaffold, 
   OnboardingPrimaryButton,
@@ -12,6 +12,7 @@ interface Props {
   onSubmit: () => void;
   onBack: () => void;
   isSubmitting?: boolean;
+  errorMessage?: string | null;
 }
 
 export function OnboardingReviewScreen({
@@ -20,6 +21,7 @@ export function OnboardingReviewScreen({
   onSubmit,
   onBack,
   isSubmitting = false,
+  errorMessage = null,
 }: Props) {
   const goalLabelMap: Record<string, string> = {
     weight_loss: 'Weight Loss & Calorie Deficit',
@@ -177,6 +179,13 @@ export function OnboardingReviewScreen({
             Your shared profile and module settings will be initialized upon completion.
           </span>
         </div>
+
+        {errorMessage && (
+          <div className="p-3 bg-[#FDF2F2] rounded-2xl border border-[#E05252]/20 flex items-center gap-2.5 text-[11px] text-[#B83232]">
+            <AlertCircle className="w-4 h-4 text-[#E05252] shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
       </div>
 
       <OnboardingStickyFooter>

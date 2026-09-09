@@ -1,2 +1,2 @@
 export * from './ProfileTypes';
-export { ProfileRepository } from './ProfileRepository';
+export { ProfileRepository, formatSupabaseError } from './ProfileRepository';

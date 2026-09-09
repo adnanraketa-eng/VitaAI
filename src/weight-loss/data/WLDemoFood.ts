@@ -1,11 +1,9 @@
 import { WLMealEntry } from './WLTypes';
 
 /**
- * TEMPORARY FRONTEND DEMO FOOD DATA
- * For Weight Loss UI visualization and testing only.
- * Exactly ONE demo food entry: Grilled Chicken Salad (Lunch).
- * NOT stored in Supabase, PostgreSQL, localStorage, sessionStorage, or IndexedDB.
- * Easily removable when connecting to real Supabase repository.
+ * @deprecated TEMPORARY FRONTEND DEMO FOOD DATA - NO LONGER USED IN PRODUCTION
+ * Production repositories now query Supabase meal_log_entries directly.
+ * Retained only for test fixture reference.
  */
 export const WL_DEMO_MEAL: WLMealEntry = {
   id: 'wl_demo_meal_grilled_chicken_salad',

@@ -36,7 +36,7 @@ function mapRowToSharedProfile(row: ProfileRow): SharedProfile {
  * Formats Supabase PostgREST errors into clean, descriptive errors
  * without exposing internal secrets or raw connection strings.
  */
-function formatSupabaseError(error: unknown, context: string): Error {
+export function formatSupabaseError(error: unknown, context: string): Error {
   if (error && typeof error === 'object' && 'message' in error) {
     const pgError = error as { message: string; details?: string; hint?: string; code?: string };
     const detail = pgError.details || pgError.hint;

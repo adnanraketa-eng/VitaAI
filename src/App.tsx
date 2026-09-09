@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BottomTab, ActiveModule, UserSharedProfile, WeightLossSettings } from './types';
 import { BottomNavigation } from './components/BottomNavigation';
 import { WLHome } from './weight-loss/home/WLHome';
@@ -28,6 +28,20 @@ export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean>(() =>
     OnboardingRepository.isOnboardingCompleted()
   );
+
+  useEffect(() => {
+    let isMounted = true;
+    OnboardingRepository.checkOnboardingCompleted().then((completed) => {
+      if (isMounted && completed) {
+        setIsOnboarded(true);
+      }
+    }).catch(() => {
+      // Fail closed to uncompleted state
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // One shared profile across all modules
   const [sharedProfile, setSharedProfile] = useState<UserSharedProfile>({

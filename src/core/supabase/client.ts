@@ -20,7 +20,8 @@ function getSupabaseCredentials(): { url: string; anonKey: string } {
     );
   }
 
-  return { url: supabaseUrl.trim(), anonKey: supabaseAnonKey.trim() };
+  const sanitizedUrl = supabaseUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+  return { url: sanitizedUrl, anonKey: supabaseAnonKey.trim() };
 }
 
 let clientInstance: SupabaseClient | null = null;
