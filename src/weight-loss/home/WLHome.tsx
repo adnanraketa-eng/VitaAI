@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { BottomTab, ActiveModule, UserSharedProfile, WeightLossSettings } from '../../types';
 import { WLRepository } from '../data/WLRepository';
+import { WLWeightRecord, WLMealEntry, WLDailyNutritionSummary } from '../data/WLTypes';
 import { WLWeight } from '../weight/WLWeight';
 import { WLFood } from '../food/WLFood';
 import { WLWater } from '../water/WLWater';

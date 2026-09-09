@@ -94,7 +94,7 @@ export default function App() {
   const isCancerAwareness = activeModule === 'cancer_awareness';
   const isDiabetesAwareness = activeModule === 'diabetes_awareness';
 
-  const handleOnboardingComplete = (data: OnboardingData) => {
+  const handleOnboardingComplete = async (data: OnboardingData) => {
     setSharedProfile((prev) => ({
       ...prev,
       fullName: data.fullName,
@@ -123,7 +123,9 @@ export default function App() {
     }));
 
     if (data.currentWeightLb) {
-      WLRepository.addWeightRecord(data.currentWeightLb, 'Initial weigh-in from onboarding');
+      await WLRepository.addWeightRecord(data.currentWeightLb, 'Initial weigh-in from onboarding').catch(() => {
+        // Non-blocking initial weight recording
+      });
     }
 
     if (data.primaryGoal === 'diabetes_awareness') {
