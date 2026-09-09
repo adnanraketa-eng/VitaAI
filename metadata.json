@@ -1,0 +1,6 @@
+{
+  "name": "VitaAI - Weight Loss",
+  "description": "Personalized nutrition, weight journey tracking, cancer awareness, and diabetes-friendly health coaching.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
