@@ -7,6 +7,7 @@ import {
 import { UserSharedProfile, WeightLossSettings } from '../../types';
 import { PersonalDetailsModal } from '../../profile/PersonalDetailsModal';
 import { WLSettings } from '../settings/WLSettings';
+import { supabase } from '../../core/supabase';
 
 interface Props {
   profile: UserSharedProfile;
@@ -212,13 +213,17 @@ export function WLProfile({
 
         {/* Sign Out Button */}
         <button 
-          onClick={() => {
+          id="btn-sign-out-wl"
+          onClick={async () => {
             if (window.confirm('Are you sure you want to sign out of VitaAI?')) {
-              localStorage.clear();
-              window.location.reload();
+              try {
+                await supabase.auth.signOut();
+              } catch (err) {
+                console.error('Sign out error:', err);
+              }
             }
           }}
-          className="w-full p-4 rounded-3xl bg-white border border-[#DCE6E0] text-xs font-bold text-[#D65A5A] hover:bg-[#FFF1F0] transition-colors flex items-center justify-center gap-2 shadow-xs"
+          className="w-full p-4 rounded-3xl bg-white border border-[#DCE6E0] text-xs font-bold text-[#D65A5A] hover:bg-[#FFF1F0] transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           <span>Sign Out of VitaAI</span>

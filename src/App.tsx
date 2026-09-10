@@ -21,25 +21,96 @@ import { DiabetesAwarenessSettings } from './diabetes-awareness/types';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { OnboardingRepository } from './onboarding/OnboardingRepository';
 import { OnboardingData } from './onboarding/OnboardingTypes';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from './core/supabase';
+import { ProfileRepository } from './core/profile';
+import { AuthScreen } from './auth/AuthScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<BottomTab>('home');
   const [activeModule, setActiveModule] = useState<ActiveModule>('weight_loss');
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(() =>
-    OnboardingRepository.isOnboardingCompleted()
-  );
+  const [session, setSession] = useState<Session | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
-    OnboardingRepository.checkOnboardingCompleted().then((completed) => {
-      if (isMounted && completed) {
-        setIsOnboarded(true);
+
+    async function evaluateAuthAndOnboarding(activeSession: Session | null) {
+      if (!activeSession) {
+        if (isMounted) {
+          setSession(null);
+          setIsOnboarded(false);
+          setIsAuthLoading(false);
+        }
+        return;
       }
-    }).catch(() => {
-      // Fail closed to uncompleted state
+
+      if (isMounted) {
+        setSession(activeSession);
+      }
+
+      try {
+        const completed = await OnboardingRepository.checkOnboardingCompleted();
+        if (!isMounted) return;
+        setIsOnboarded(completed);
+
+        if (completed) {
+          try {
+            const userProfile = await ProfileRepository.getProfile();
+            if (userProfile && isMounted) {
+              setSharedProfile((prev) => ({
+                ...prev,
+                fullName: userProfile.fullName || prev.fullName,
+                email: userProfile.email || prev.email,
+                dob: userProfile.dateOfBirth || prev.dob,
+                gender: userProfile.gender || prev.gender,
+                heightCm: userProfile.heightCm || prev.heightCm,
+              }));
+            }
+          } catch {
+            // Non-critical profile synchronization
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsOnboarded(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthLoading(false);
+        }
+      }
+    }
+
+    // 1. Initial restoration of persisted session on app launch / refresh
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: initialSession }, error }) => {
+        if (!isMounted) return;
+        if (error || !initialSession) {
+          evaluateAuthAndOnboarding(null);
+        } else {
+          evaluateAuthAndOnboarding(initialSession);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          evaluateAuthAndOnboarding(null);
+        }
+      });
+
+    // 2. Listen to active auth events (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      if (!isMounted) return;
+      evaluateAuthAndOnboarding(currentSession);
     });
+
     return () => {
       isMounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -139,6 +210,29 @@ export default function App() {
     setActiveTab('home');
     setIsOnboarded(true);
   };
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-[#E3ECF3] flex justify-center selection:bg-[#1769AA] selection:text-white">
+        <div className="w-full max-w-md bg-[#F7FAFC] min-h-screen relative shadow-2xl flex flex-col items-center justify-center border-x border-[#DCE7EE] p-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#1769AA] text-white flex items-center justify-center font-black text-xl mb-3 shadow-xs animate-pulse">
+            V
+          </div>
+          <p className="text-xs font-semibold text-[#536675]">Initializing VitaAI...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-[#E3ECF3] flex justify-center selection:bg-[#1769AA] selection:text-white">
+        <div className="w-full max-w-md bg-[#F7FAFC] min-h-screen relative shadow-2xl flex flex-col border-x border-[#DCE7EE]">
+          <AuthScreen />
+        </div>
+      </div>
+    );
+  }
 
   if (!isOnboarded) {
     return (
