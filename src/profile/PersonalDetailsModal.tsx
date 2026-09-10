@@ -4,6 +4,7 @@ import {
   ChevronRight, Check, Sparkles, Droplet, Shield
 } from 'lucide-react';
 import { UserSharedProfile, ActiveModule } from '../types';
+import { calculateAge } from './ProfileScreen';
 
 interface Props {
   profile: UserSharedProfile;
@@ -23,7 +24,11 @@ export function PersonalDetailsModal({
   const [showSavedToast, setShowSavedToast] = useState(false);
 
   const handleSave = () => {
-    onSaveProfile(localProfile);
+    const computedAge = calculateAge(localProfile.dob) ?? localProfile.age;
+    onSaveProfile({
+      ...localProfile,
+      age: computedAge,
+    });
     setShowSavedToast(true);
     setTimeout(() => {
       setShowSavedToast(false);
@@ -179,22 +184,30 @@ export function PersonalDetailsModal({
                     <input
                       type="text"
                       value={localProfile.dob}
-                      onChange={(e) => setLocalProfile({ ...localProfile, dob: e.target.value })}
+                      onChange={(e) => {
+                        const newDob = e.target.value;
+                        const computedAge = calculateAge(newDob);
+                        setLocalProfile({ 
+                          ...localProfile, 
+                          dob: newDob,
+                          age: computedAge ?? localProfile.age 
+                        });
+                      }}
+                      placeholder="e.g. 14 Sep 1992"
                       className="text-xs font-bold border-b border-current focus:outline-none bg-transparent"
                       autoFocus
                     />
                   ) : (
-                    <span className="text-xs font-bold block">{localProfile.dob}</span>
+                    <span className="text-xs font-bold block">{localProfile.dob || 'Not set'}</span>
                   )}
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 opacity-50" />
             </div>
 
-            {/* Age */}
+            {/* Age (Calculated from Date of Birth) */}
             <div 
-              onClick={() => setEditingField(editingField === 'age' ? null : 'age')}
-              className="p-4 flex items-center justify-between hover:bg-black/5 cursor-pointer transition-colors"
+              className="p-4 flex items-center justify-between transition-colors"
             >
               <div className="flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-2xl ${theme.accentBg} ${theme.accent} flex items-center justify-center`}>
@@ -202,20 +215,14 @@ export function PersonalDetailsModal({
                 </div>
                 <div>
                   <span className="text-xs opacity-70 font-medium block">Age</span>
-                  {editingField === 'age' ? (
-                    <input
-                      type="number"
-                      value={localProfile.age}
-                      onChange={(e) => setLocalProfile({ ...localProfile, age: Number(e.target.value) || localProfile.age })}
-                      className="text-xs font-bold border-b border-current focus:outline-none bg-transparent"
-                      autoFocus
-                    />
-                  ) : (
-                    <span className="text-xs font-bold block">{localProfile.age} years</span>
-                  )}
+                  <span className="text-xs font-bold block">
+                    {calculateAge(localProfile.dob) !== null 
+                      ? `${calculateAge(localProfile.dob)} years` 
+                      : (localProfile.age ? `${localProfile.age} years` : 'Not set')}
+                  </span>
+                  <span className="text-[10px] opacity-60 block">Calculated from Date of birth</span>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 opacity-50" />
             </div>
 
             {/* Gender */}

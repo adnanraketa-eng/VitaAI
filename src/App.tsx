@@ -7,7 +7,7 @@ import { WLProgress } from './weight-loss/progress/WLProgress';
 import { WLCoach } from './weight-loss/coach/WLCoach';
 import { WLProfile } from './weight-loss/profile/WLProfile';
 import { WLRepository } from './weight-loss/data/WLRepository';
-import { ProfileScreen } from './profile/ProfileScreen';
+import { ProfileScreen, calculateAge } from './profile/ProfileScreen';
 import { CancerHomeScreen } from './cancer-awareness/home/CancerHomeScreen';
 import { CancerHistoryScreen } from './cancer-awareness/history/CancerHistoryScreen';
 import { CancerProgressScreen } from './cancer-awareness/progress/CancerProgressScreen';
@@ -59,11 +59,13 @@ export default function App() {
           try {
             const userProfile = await ProfileRepository.getProfile();
             if (userProfile && isMounted) {
+              const computedAge = calculateAge(userProfile.dateOfBirth);
               setSharedProfile((prev) => ({
                 ...prev,
                 fullName: userProfile.fullName || prev.fullName,
                 email: userProfile.email || prev.email,
                 dob: userProfile.dateOfBirth || prev.dob,
+                age: computedAge ?? prev.age,
                 gender: userProfile.gender || prev.gender,
                 heightCm: userProfile.heightCm || prev.heightCm,
               }));
@@ -114,17 +116,17 @@ export default function App() {
     };
   }, []);
 
-  // One shared profile across all modules
+  // One shared profile across all modules (populated from public.profiles)
   const [sharedProfile, setSharedProfile] = useState<UserSharedProfile>({
-    fullName: 'Maya Patel',
-    email: 'maya.patel@email.com',
+    fullName: '',
+    email: '',
     avatarUrl: '',
-    dob: '14 Sep 1992',
-    age: 32,
-    gender: 'Woman',
-    heightCm: 168,
-    memberSince: 'May 15, 2024',
-    streakDays: 7,
+    dob: '',
+    age: 0,
+    gender: '',
+    heightCm: 0,
+    memberSince: 'Today',
+    streakDays: 1,
     units: 'imperial'
   });
 

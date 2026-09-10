@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User, Droplet, Shield, Sparkles, ChevronRight, Bell, Lock, 
   HelpCircle, LogOut, Flame, RotateCw, Edit3, Settings, 
-  TrendingUp, Droplets, Award, Utensils, Moon, Info, Scale
+  TrendingUp, Droplets, Award, Utensils, Moon, Info, Scale,
+  AlertCircle, Loader2
 } from 'lucide-react';
 import { UserSharedProfile, WeightLossSettings, ActiveModule } from '../types';
 import { DiabetesAwarenessSettings } from '../diabetes-awareness/types';
@@ -11,6 +12,21 @@ import { PersonalDetailsModal } from './PersonalDetailsModal';
 import { WeightLossSettingsModal } from '../weight-loss/settings/WeightLossSettingsModal';
 import { DiabetesSettingsModal } from '../diabetes-awareness/settings/DiabetesSettingsModal';
 import { CancerSettingsModal } from '../cancer-awareness/settings/CancerSettingsModal';
+import { ProfileRepository } from '../core/profile';
+import { SharedProfile } from '../core/profile/ProfileTypes';
+
+export function calculateAge(dobString: string | null | undefined): number | null {
+  if (!dobString) return null;
+  const birthDate = new Date(dobString);
+  if (isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+}
 
 interface Props {
   activeModule: ActiveModule;
@@ -41,11 +57,107 @@ export function ProfileScreen({
   const [showPersonalDetails, setShowPersonalDetails] = useState(false);
   const [showModuleSettings, setShowModuleSettings] = useState(false);
 
+  // Authoritative shared profile state loaded directly from public.profiles
+  const [profileData, setProfileData] = useState<SharedProfile | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadUserProfile = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const data = await ProfileRepository.getProfile();
+      setProfileData(data);
+      if (data) {
+        const computedAge = calculateAge(data.dateOfBirth);
+        onUpdateProfile({
+          fullName: data.fullName || '',
+          email: data.email || '',
+          avatarUrl: profile.avatarUrl || '',
+          dob: data.dateOfBirth || '',
+          age: computedAge ?? 0,
+          gender: data.gender || '',
+          heightCm: data.heightCm || 0,
+          memberSince: profile.memberSince || 'Today',
+          streakDays: profile.streakDays || 1,
+          units: profile.units || 'imperial',
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to load profile from database.';
+      setErrorMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
+
+  const handleSaveProfile = async (updated: UserSharedProfile) => {
+    try {
+      const saved = await ProfileRepository.updateProfile({
+        fullName: updated.fullName,
+        dateOfBirth: updated.dob,
+        gender: updated.gender,
+        heightCm: updated.heightCm,
+      });
+      setProfileData(saved);
+      onUpdateProfile(updated);
+    } catch (err) {
+      console.error('Failed to update shared profile:', err);
+      onUpdateProfile(updated);
+    }
+  };
+
   const getInitials = (name: string) => {
     const parts = name.trim().split(' ');
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return (name[0] || 'M').toUpperCase();
+    return (name[0] || 'U').toUpperCase();
   };
+
+  // Authoritative shared profile fields loaded from public.profiles
+  const fullName = profileData?.fullName ?? profile.fullName ?? '';
+  const email = profileData?.email ?? profile.email ?? '';
+  const dob = profileData?.dateOfBirth ?? profile.dob ?? '';
+  const computedAge = calculateAge(dob);
+  const age = computedAge !== null ? computedAge : (profile.age || null);
+  const gender = profileData?.gender ?? profile.gender ?? '';
+  const heightCm = profileData?.heightCm ?? profile.heightCm ?? null;
+
+  const currentSharedProfile: UserSharedProfile = {
+    ...profile,
+    fullName,
+    email,
+    dob,
+    age: age ?? 0,
+    gender,
+    heightCm: heightCm ?? 0,
+  };
+
+  const renderLoadingState = () => (
+    <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
+      <Loader2 className="w-6 h-6 animate-spin opacity-60 text-current" />
+      <p className="text-xs font-medium opacity-75">Loading shared profile...</p>
+    </div>
+  );
+
+  const renderErrorState = () => (
+    <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center justify-between shadow-xs">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span>{errorMessage}</span>
+      </div>
+      <button 
+        type="button"
+        onClick={loadUserProfile}
+        className="px-2.5 py-1 bg-white border border-red-200 rounded-xl font-bold hover:bg-red-50 text-[10px]"
+      >
+        Retry
+      </button>
+    </div>
+  );
 
   /* ==========================================================
      DIABETES AWARENESS PROFILE VIEW
@@ -61,21 +173,54 @@ export function ProfileScreen({
 
         <main className="px-4 space-y-4 mt-2">
           {/* Shared User Identity Card */}
-          <div className="bg-white rounded-3xl p-5 border border-[#DCE7EE] shadow-2xs flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-[#EAF5FB] text-[#1769AA] flex items-center justify-center font-extrabold text-2xl shrink-0 border-2 border-[#1769AA]/20">
-              {getInitials(profile.fullName)}
-            </div>
+          <div className="bg-white rounded-3xl p-5 border border-[#DCE7EE] shadow-2xs space-y-4">
+            {isLoading ? (
+              renderLoadingState()
+            ) : (
+              <>
+                {errorMessage && renderErrorState()}
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-[#EAF5FB] text-[#1769AA] flex items-center justify-center font-extrabold text-2xl shrink-0 border-2 border-[#1769AA]/20">
+                    {getInitials(fullName || 'User')}
+                  </div>
 
-            <div className="space-y-1 flex-1">
-              <h2 className="text-lg font-bold text-[#12324A]">{profile.fullName}</h2>
-              <p className="text-xs text-[#536675]">{profile.email}</p>
-              <div className="flex items-center gap-2 pt-1">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E8A23A] bg-[#FFF5E5] px-2 py-0.5 rounded-full">
-                  <Flame className="w-3 h-3 fill-current" /> {profile.streakDays} Day Streak
-                </span>
-                <span className="text-[11px] text-[#536675]">Member since {profile.memberSince}</span>
-              </div>
-            </div>
+                  <div className="space-y-1 flex-1">
+                    <h2 className="text-lg font-bold text-[#12324A]">{fullName || 'User'}</h2>
+                    <p className="text-xs text-[#536675]">{email || 'No email provided'}</p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E8A23A] bg-[#FFF5E5] px-2 py-0.5 rounded-full">
+                        <Flame className="w-3 h-3 fill-current" /> {profile.streakDays} Day Streak
+                      </span>
+                      <span className="text-[11px] text-[#536675]">Member since {profile.memberSince}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shared Profile Details: DOB, Age, Gender, Height */}
+                <div className="grid grid-cols-4 gap-2 pt-3 border-t border-[#DCE7EE] text-center">
+                  <div>
+                    <span className="text-[10px] text-[#536675] block uppercase font-medium">DOB</span>
+                    <span className="text-xs font-bold text-[#12324A] truncate block">{dob || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#536675] block uppercase font-medium">Age</span>
+                    <span className="text-xs font-bold text-[#12324A] block">
+                      {age !== null && age !== undefined ? `${age} yrs` : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#536675] block uppercase font-medium">Gender</span>
+                    <span className="text-xs font-bold text-[#12324A] truncate block">{gender || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#536675] block uppercase font-medium">Height</span>
+                    <span className="text-xs font-bold text-[#12324A] block">
+                      {heightCm ? `${heightCm} cm` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Active Goal Card */}
@@ -191,9 +336,9 @@ export function ProfileScreen({
         {/* Modals */}
         {showPersonalDetails && (
           <PersonalDetailsModal
-            profile={profile}
+            profile={currentSharedProfile}
             activeModule={activeModule}
-            onSaveProfile={onUpdateProfile}
+            onSaveProfile={handleSaveProfile}
             onClose={() => setShowPersonalDetails(false)}
           />
         )}
@@ -222,21 +367,54 @@ export function ProfileScreen({
 
         <main className="px-4 space-y-4 mt-2">
           {/* Shared User Identity Card */}
-          <div className="bg-[#FCFBFD] rounded-3xl p-5 border border-[#E4DEE9] shadow-xs flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-[#EFE7F5] text-[#5A3577] flex items-center justify-center font-extrabold text-2xl shrink-0 border-2 border-[#5A3577]/20">
-              {getInitials(profile.fullName)}
-            </div>
+          <div className="bg-[#FCFBFD] rounded-3xl p-5 border border-[#E4DEE9] shadow-xs space-y-4">
+            {isLoading ? (
+              renderLoadingState()
+            ) : (
+              <>
+                {errorMessage && renderErrorState()}
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-[#EFE7F5] text-[#5A3577] flex items-center justify-center font-extrabold text-2xl shrink-0 border-2 border-[#5A3577]/20">
+                    {getInitials(fullName || 'User')}
+                  </div>
 
-            <div className="space-y-1 flex-1">
-              <h2 className="text-lg font-bold text-[#2A2233]">{profile.fullName}</h2>
-              <p className="text-xs text-[#6B6275]">{profile.email}</p>
-              <div className="flex items-center gap-2 pt-1">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E8674B] bg-[#FBE7E1] px-2 py-0.5 rounded-full">
-                  <Flame className="w-3 h-3" /> {profile.streakDays} Day Streak
-                </span>
-                <span className="text-[11px] text-[#6B6275]">Member since {profile.memberSince}</span>
-              </div>
-            </div>
+                  <div className="space-y-1 flex-1">
+                    <h2 className="text-lg font-bold text-[#2A2233]">{fullName || 'User'}</h2>
+                    <p className="text-xs text-[#6B6275]">{email || 'No email provided'}</p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E8674B] bg-[#FBE7E1] px-2 py-0.5 rounded-full">
+                        <Flame className="w-3 h-3" /> {profile.streakDays} Day Streak
+                      </span>
+                      <span className="text-[11px] text-[#6B6275]">Member since {profile.memberSince}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shared Profile Details: DOB, Age, Gender, Height */}
+                <div className="grid grid-cols-4 gap-2 pt-3 border-t border-[#E4DEE9] text-center">
+                  <div>
+                    <span className="text-[10px] text-[#6B6275] block uppercase font-medium">DOB</span>
+                    <span className="text-xs font-bold text-[#2A2233] truncate block">{dob || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#6B6275] block uppercase font-medium">Age</span>
+                    <span className="text-xs font-bold text-[#2A2233] block">
+                      {age !== null && age !== undefined ? `${age} yrs` : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#6B6275] block uppercase font-medium">Gender</span>
+                    <span className="text-xs font-bold text-[#2A2233] truncate block">{gender || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#6B6275] block uppercase font-medium">Height</span>
+                    <span className="text-xs font-bold text-[#2A2233] block">
+                      {heightCm ? `${heightCm} cm` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Active Goal Card */}
@@ -352,9 +530,9 @@ export function ProfileScreen({
         {/* Modals */}
         {showPersonalDetails && (
           <PersonalDetailsModal
-            profile={profile}
+            profile={currentSharedProfile}
             activeModule={activeModule}
-            onSaveProfile={onUpdateProfile}
+            onSaveProfile={handleSaveProfile}
             onClose={() => setShowPersonalDetails(false)}
           />
         )}
@@ -377,7 +555,9 @@ export function ProfileScreen({
       {/* Header */}
       <header className="px-5 pt-3 pb-2 flex items-center justify-between sticky top-0 bg-[#F6FAF7]/90 backdrop-blur-md z-30">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[#1B2B24]">{profile.fullName.split(' ')[0]}'s Profile</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[#1B2B24]">
+            {fullName ? `${fullName.split(' ')[0]}'s Profile` : 'Profile'}
+          </h1>
           <p className="text-xs text-[#4C5F55]">Manage account and preferences</p>
         </div>
         <div className="flex items-center gap-2">
@@ -399,42 +579,60 @@ export function ProfileScreen({
       <main className="px-4 space-y-4 mt-2">
         {/* User Hero Card */}
         <div className="bg-white rounded-3xl p-5 border border-[#DCE6E0] shadow-xs space-y-4">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-14 h-14 rounded-full bg-[#DCE9E1] text-[#1F7A5C] flex items-center justify-center font-bold text-xl border-2 border-[#1F7A5C]/30">
-                  {getInitials(profile.fullName)}
+          {isLoading ? (
+            renderLoadingState()
+          ) : (
+            <>
+              {errorMessage && renderErrorState()}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-14 h-14 rounded-full bg-[#DCE9E1] text-[#1F7A5C] flex items-center justify-center font-bold text-xl border-2 border-[#1F7A5C]/30">
+                      {getInitials(fullName || 'User')}
+                    </div>
+                    <button 
+                      onClick={() => setShowPersonalDetails(true)}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#1F7A5C] text-white rounded-full flex items-center justify-center shadow-xs"
+                    >
+                      <Edit3 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <h2 className="text-base font-bold text-[#1B2B24]">{fullName || 'User'}</h2>
+                    <p className="text-xs text-[#8A9A92]">{email || 'No email provided'}</p>
+                    <div className="inline-block mt-1 px-2.5 py-0.5 bg-[#EFF6F1] text-[#1F7A5C] text-[10px] font-bold rounded-full">
+                      Weight Loss & Management
+                    </div>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => setShowPersonalDetails(true)}
-                  className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#1F7A5C] text-white rounded-full flex items-center justify-center shadow-xs"
-                >
-                  <Edit3 className="w-2.5 h-2.5" />
-                </button>
               </div>
 
-              <div>
-                <h2 className="text-base font-bold text-[#1B2B24]">{profile.fullName}</h2>
-                <p className="text-xs text-[#8A9A92]">{profile.email}</p>
-                <div className="inline-block mt-1 px-2.5 py-0.5 bg-[#EFF6F1] text-[#1F7A5C] text-[10px] font-bold rounded-full">
-                  Weight Loss & Management
+              {/* Shared Profile Details: DOB, Age, Gender, Height */}
+              <div className="grid grid-cols-4 gap-2 pt-3 border-t border-[#E7EEE9] text-center">
+                <div>
+                  <span className="text-[10px] text-[#8A9A92] block uppercase font-medium">DOB</span>
+                  <span className="text-xs font-bold text-[#1B2B24] truncate block">{dob || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8A9A92] block uppercase font-medium">Age</span>
+                  <span className="text-xs font-bold text-[#1B2B24] block">
+                    {age !== null && age !== undefined ? `${age} yrs` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8A9A92] block uppercase font-medium">Gender</span>
+                  <span className="text-xs font-bold text-[#1B2B24] truncate block">{gender || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8A9A92] block uppercase font-medium">Height</span>
+                  <span className="text-xs font-bold text-[#1B2B24] block">
+                    {heightCm ? `${heightCm} cm` : '—'}
+                  </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center pt-3 border-t border-[#E7EEE9] text-xs">
-            <div>
-              <span className="text-[10px] text-[#8A9A92] block uppercase tracking-wider">Member Since</span>
-              <span className="font-semibold text-[#1B2B24]">{profile.memberSince}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] text-[#8A9A92] block uppercase tracking-wider">Current Streak</span>
-              <span className="font-bold text-[#FF8B5E] flex items-center gap-1 justify-end">
-                🔥 {profile.streakDays} days
-              </span>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* 4 Quick Stats Badges */}
@@ -627,9 +825,9 @@ export function ProfileScreen({
       {/* Modals */}
       {showPersonalDetails && (
         <PersonalDetailsModal
-          profile={profile}
+          profile={currentSharedProfile}
           activeModule={activeModule}
-          onSaveProfile={onUpdateProfile}
+          onSaveProfile={handleSaveProfile}
           onClose={() => setShowPersonalDetails(false)}
         />
       )}
