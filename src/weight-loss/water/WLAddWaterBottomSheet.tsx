@@ -43,16 +43,23 @@ export function WLAddWaterBottomSheet({ isOpen, onClose, onWaterAdded }: Props) 
 
   if (!isOpen) return null;
 
-  const handleSelectPreset = (ml: number) => {
+  const handleSelectPreset = async (ml: number) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     const amountL = ml / 1000;
-    WLRepository.addWater(amountL);
-    onWaterAdded(amountL);
-    onClose();
+    try {
+      await WLRepository.addWater(amountL);
+      onWaterAdded(amountL);
+      onClose();
+    } catch (err) {
+      console.warn('Add water preset failed:', err);
+      setErrorMessage('Failed to record water. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
@@ -75,9 +82,16 @@ export function WLAddWaterBottomSheet({ isOpen, onClose, onWaterAdded }: Props) 
 
     setIsSubmitting(true);
     const amountL = parseFloat((ml / 1000).toFixed(3));
-    WLRepository.addWater(amountL);
-    onWaterAdded(amountL);
-    onClose();
+    try {
+      await WLRepository.addWater(amountL);
+      onWaterAdded(amountL);
+      onClose();
+    } catch (err) {
+      console.warn('Add water manual failed:', err);
+      setErrorMessage('Failed to record water. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Swipe-down touch handlers

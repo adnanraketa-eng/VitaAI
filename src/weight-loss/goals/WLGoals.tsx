@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Target, Sparkles, Check, Plus, 
   Flame, Footprints, Droplets, Shield 
@@ -11,21 +11,60 @@ interface Props {
   onGoalUpdated?: (updated: WLGoal) => void;
 }
 
+const defaultGoal: WLGoal = {
+  startWeightLb: 175,
+  currentWeightLb: 165,
+  goalWeightLb: 150,
+  targetPace: 'moderate',
+  dailyCalorieGoalKcal: 1850,
+  dailyProteinGoalG: 105,
+  dailyWaterGoalL: 2.5,
+  dailyStepGoal: 9000,
+  healthyHabits: [
+    { id: '1', title: 'Drink 500ml water first thing in the morning', completed: true },
+    { id: '2', title: 'No refined sugars after 8:00 PM', completed: false },
+    { id: '3', title: 'Get 30g protein with breakfast', completed: true },
+  ],
+  dietaryPreferences: [],
+  updatedAt: new Date().toISOString(),
+};
+
 export function WLGoals({ onClose, onGoalUpdated }: Props) {
-  const [goal, setGoal] = useState<WLGoal>(() => WLRepository.getGoals());
+  const [goal, setGoal] = useState<WLGoal>(defaultGoal);
   const [newHabitTitle, setNewHabitTitle] = useState('');
   const [savedToast, setSavedToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const toggleHabit = (id: string) => {
+  useEffect(() => {
+    let active = true;
+    WLRepository.getGoals()
+      .then((g) => {
+        if (active && g) {
+          setGoal(g);
+        }
+      })
+      .catch((err) => {
+        console.warn('WLGoals load error:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleHabit = async (id: string) => {
     const updatedHabits = goal.healthyHabits.map((h) =>
       h.id === id ? { ...h, completed: !h.completed } : h
     );
-    const updated = WLRepository.updateGoals({ healthyHabits: updatedHabits });
-    setGoal(updated);
-    onGoalUpdated?.(updated);
+    try {
+      const updated = await WLRepository.updateGoals({ healthyHabits: updatedHabits });
+      setGoal(updated);
+      onGoalUpdated?.(updated);
+    } catch (err) {
+      console.warn('Toggle habit failed:', err);
+    }
   };
 
-  const handleAddHabit = (e: React.FormEvent) => {
+  const handleAddHabit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHabitTitle.trim()) return;
     const newHabit = {
@@ -33,24 +72,35 @@ export function WLGoals({ onClose, onGoalUpdated }: Props) {
       title: newHabitTitle.trim(),
       completed: false,
     };
-    const updated = WLRepository.updateGoals({
-      healthyHabits: [...goal.healthyHabits, newHabit],
-    });
-    setGoal(updated);
-    setNewHabitTitle('');
-    onGoalUpdated?.(updated);
+    try {
+      const updated = await WLRepository.updateGoals({
+        healthyHabits: [...goal.healthyHabits, newHabit],
+      });
+      setGoal(updated);
+      setNewHabitTitle('');
+      onGoalUpdated?.(updated);
+    } catch (err) {
+      console.warn('Add habit failed:', err);
+    }
   };
 
-  const handleSaveTargets = (e: React.FormEvent) => {
+  const handleSaveTargets = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated = WLRepository.updateGoals(goal);
-    setGoal(updated);
-    onGoalUpdated?.(updated);
-    setSavedToast(true);
-    setTimeout(() => {
-      setSavedToast(false);
-      onClose();
-    }, 600);
+    setErrorMessage(null);
+    try {
+      const updated = await WLRepository.updateGoals(goal);
+      setGoal(updated);
+      onGoalUpdated?.(updated);
+      setSavedToast(true);
+      setTimeout(() => {
+        setSavedToast(false);
+        onClose();
+      }, 600);
+    } catch (err) {
+      console.warn('Save targets failed:', err);
+      setErrorMessage('Failed to save targets. Please try again.');
+      setTimeout(() => setErrorMessage(null), 3000);
+    }
   };
 
   const totalToLose = Math.max(0, goal.startWeightLb - goal.goalWeightLb);
@@ -88,6 +138,13 @@ export function WLGoals({ onClose, onGoalUpdated }: Props) {
         <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-[#1F7A5C] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-1.5 animate-in fade-in">
           <Check className="w-4 h-4 stroke-[3]" />
           <span>Goals Updated!</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-1.5 animate-in fade-in">
+          <Shield className="w-4 h-4" />
+          <span>{errorMessage}</span>
         </div>
       )}
 

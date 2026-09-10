@@ -44,21 +44,47 @@ export function WLHome({
   const [showWaterBottomSheet, setShowWaterBottomSheet] = useState(false);
 
   // Real data from WLRepository
-  const [latestWeightRecord, setLatestWeightRecord] = useState(() => WLRepository.getLatestWeight());
-  const [todayMeals, setTodayMeals] = useState(() => WLRepository.getTodayMeals());
-  const [todayWater, setTodayWater] = useState(() => WLRepository.getTodayWaterL());
-  const [todayActivity, setTodayActivity] = useState(() => WLRepository.getTodayActivity());
+  const [latestWeightRecord, setLatestWeightRecord] = useState<WLWeightRecord | null>(null);
+  const [todayMeals, setTodayMeals] = useState<WLMealEntry[]>([]);
+  const [todayWater, setTodayWater] = useState<number>(0);
+  const [todayActivity, setTodayActivity] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>({
+    steps: 0,
+    exerciseMin: 0,
+    caloriesBurned: 0,
+  });
+  const [nutritionSummary, setNutritionSummary] = useState<WLDailyNutritionSummary>({
+    calories: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    fiberG: 0,
+    waterL: 0,
+    analysesCount: 0,
+    remainingCalories: settings.dailyCalorieGoalKcal,
+  });
 
-  const refreshData = () => {
-    setLatestWeightRecord(WLRepository.getLatestWeight());
-    setTodayMeals(WLRepository.getTodayMeals());
-    setTodayWater(WLRepository.getTodayWaterL());
-    setTodayActivity(WLRepository.getTodayActivity());
+  const refreshData = async () => {
+    try {
+      const [weight, meals, water, activity, summary] = await Promise.all([
+        WLRepository.getLatestWeight(),
+        WLRepository.getTodayMeals(),
+        WLRepository.getTodayWaterL(),
+        WLRepository.getTodayActivity(),
+        WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal),
+      ]);
+      setLatestWeightRecord(weight);
+      setTodayMeals(meals);
+      setTodayWater(water);
+      setTodayActivity(activity);
+      setNutritionSummary(summary);
+    } catch (err) {
+      console.warn('WLHome refreshData error:', err);
+    }
   };
 
   useEffect(() => {
     refreshData();
-  }, []);
+  }, [settings.dailyCalorieGoalKcal]);
 
   const currentWeight = latestWeightRecord ? latestWeightRecord.weightLb : settings.currentWeightLb;
   const startWeight = settings.startWeightLb || currentWeight;
@@ -71,7 +97,6 @@ export function WLHome({
   const toGo = Math.max(0, currentWeight - goalWeight);
 
   // Nutrition calculations from today's real meals
-  const nutritionSummary = WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal);
   const calPercent = Math.min(100, Math.round((nutritionSummary.calories / settings.dailyCalorieGoalKcal) * 100));
   const proteinPercent = Math.min(100, Math.round((nutritionSummary.proteinG / settings.dailyProteinGoalG) * 100));
   const waterPercent = Math.min(100, Math.round((todayWater / settings.dailyWaterGoalL) * 100));

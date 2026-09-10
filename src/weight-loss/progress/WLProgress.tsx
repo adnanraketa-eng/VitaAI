@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, Calendar, MoreVertical, Check, MapPin, Flag,
   Flame, Award, Droplets, Footprints, Leaf, X, Trophy, Zap, Scale, Plus
 } from 'lucide-react';
 import { BottomTab, UserSharedProfile, WeightLossSettings } from '../../types';
 import { WLRepository } from '../data/WLRepository';
+import { WLWeightRecord, WLMealEntry, WLWaterRecord, WLActivityRecord, WLDailyNutritionSummary } from '../data/WLTypes';
 import { WLWeight } from '../weight/WLWeight';
 
 interface Props {
@@ -23,8 +24,53 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   const [showAllAchievements, setShowAllAchievements] = useState(false);
 
   // Stateful records from WLRepository for reactive updates
-  const [weightRecords, setWeightRecords] = useState(() => WLRepository.getWeightRecords());
-  const mealEntries = WLRepository.getMealEntries();
+  const [weightRecords, setWeightRecords] = useState<WLWeightRecord[]>([]);
+  const [mealEntries, setMealEntries] = useState<WLMealEntry[]>([]);
+  const [waterRecords, setWaterRecords] = useState<WLWaterRecord[]>([]);
+  const [activityRecords, setActivityRecords] = useState<WLActivityRecord[]>([]);
+  const [todayNutrition, setTodayNutrition] = useState<WLDailyNutritionSummary>({
+    calories: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    fiberG: 0,
+    waterL: 0,
+    analysesCount: 0,
+    remainingCalories: settings.dailyCalorieGoalKcal,
+  });
+  const [todayWater, setTodayWater] = useState<number>(0);
+  const [todayAct, setTodayAct] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>({
+    steps: 0,
+    exerciseMin: 0,
+    caloriesBurned: 0,
+  });
+
+  const loadProgressData = async () => {
+    try {
+      const [weights, meals, water, acts, nut, tWat, tAct] = await Promise.all([
+        WLRepository.getWeightRecords(),
+        WLRepository.getMealEntries(),
+        WLRepository.getWaterRecords(),
+        WLRepository.getActivityRecords(),
+        WLRepository.getNutritionSummaryForDate(new Date(), settings.dailyCalorieGoalKcal),
+        WLRepository.getTodayWaterL(),
+        WLRepository.getTodayActivity(),
+      ]);
+      setWeightRecords(weights);
+      setMealEntries(meals);
+      setWaterRecords(water);
+      setActivityRecords(acts);
+      setTodayNutrition(nut);
+      setTodayWater(tWat);
+      setTodayAct(tAct);
+    } catch (err) {
+      console.warn('WLProgress loadData error:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadProgressData();
+  }, [settings.dailyCalorieGoalKcal]);
 
   const currentWeight = weightRecords[0]?.weightLb || settings.currentWeightLb || 159.6;
   const earliestRecord = weightRecords[weightRecords.length - 1];
@@ -73,8 +119,8 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     cutoff.setDate(now.getDate() - periodDays);
 
     const pMeals = mealEntries.filter((m) => new Date(m.loggedAt) >= cutoff);
-    const pWater = WLRepository.getWaterRecords().filter((w) => new Date(w.loggedAt) >= cutoff);
-    const pActivity = WLRepository.getActivityRecords().filter((a) => new Date(a.loggedAt) >= cutoff);
+    const pWater = waterRecords.filter((w) => new Date(w.loggedAt) >= cutoff);
+    const pActivity = activityRecords.filter((a) => new Date(a.loggedAt) >= cutoff);
 
     const mealDays = new Set(pMeals.map((m) => new Date(m.loggedAt).toDateString())).size || 1;
     const waterDays = new Set(pWater.map((w) => new Date(w.loggedAt).toDateString())).size || 1;
@@ -94,11 +140,7 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       : 0;
 
     return { avgCal, avgProt, avgWat, avgStp };
-  }, [mealEntries, periodDays]);
-
-  const todayNutrition = WLRepository.getNutritionSummaryForDate(new Date());
-  const todayWater = WLRepository.getTodayWaterL();
-  const todayAct = WLRepository.getTodayActivity();
+  }, [mealEntries, waterRecords, activityRecords, periodDays]);
 
   // Selected period values (uses period-specific data, falling back to today or defaults if empty)
   const caloriesVal = periodData.avgCal > 0 
@@ -548,10 +590,15 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       {showWeightModal && (
         <WLWeight
           onClose={() => setShowWeightModal(false)}
-          onWeightUpdated={(newW) => {
-            setWeightRecords(WLRepository.getWeightRecords());
-            if (onUpdateSettings) {
-              onUpdateSettings({ ...settings, currentWeightLb: newW });
+          onWeightUpdated={async (newW) => {
+            try {
+              const updated = await WLRepository.getWeightRecords();
+              setWeightRecords(updated);
+              if (onUpdateSettings) {
+                onUpdateSettings({ ...settings, currentWeightLb: newW });
+              }
+            } catch (err) {
+              console.warn('Update weight records in progress failed:', err);
             }
           }}
           goalWeightLb={settings.goalWeightLb}

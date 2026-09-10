@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Footprints, Dumbbell, Flame, Plus, 
   Activity, Check, Smartphone, AlertCircle 
@@ -13,9 +13,14 @@ interface Props {
 }
 
 export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props) {
-  const [todaySummary, setTodaySummary] = useState(() => WLRepository.getTodayActivity());
-  const [records, setRecords] = useState<WLActivityRecord[]>(() => WLRepository.getActivityRecords());
+  const [todaySummary, setTodaySummary] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>({
+    steps: 0,
+    exerciseMin: 0,
+    caloriesBurned: 0,
+  });
+  const [records, setRecords] = useState<WLActivityRecord[]>([]);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const [selectedType, setSelectedType] = useState('Brisk Walking');
   const [stepsInput, setStepsInput] = useState('');
@@ -23,47 +28,84 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
   const [caloriesInput, setCaloriesInput] = useState('180');
   const [healthConnectStatus, setHealthConnectStatus] = useState<'idle' | 'syncing' | 'synced'>('idle');
 
+  const loadData = async () => {
+    try {
+      const [sum, recs] = await Promise.all([
+        WLRepository.getTodayActivity(),
+        WLRepository.getActivityRecords(),
+      ]);
+      setTodaySummary(sum);
+      setRecords(recs);
+    } catch (err) {
+      console.warn('WLActivity loadData error:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const stepPercent = Math.min(100, Math.round((todaySummary.steps / dailyStepGoal) * 100));
 
   const handleSyncHealthConnect = () => {
     setHealthConnectStatus('syncing');
-    setTimeout(() => {
-      // Fetch or sync available sensor counts
-      const syncSteps = 2450;
-      const syncRecord = WLRepository.addActivityRecord({
-        steps: syncSteps,
-        exerciseMin: 25,
-        caloriesBurned: 140,
-        activityType: 'Health Connect Auto-Sync',
-        source: 'Health Connect',
-      });
-      setHealthConnectStatus('synced');
-      setTodaySummary(WLRepository.getTodayActivity());
-      setRecords(WLRepository.getActivityRecords());
-      onActivityUpdated?.();
-      setTimeout(() => setHealthConnectStatus('idle'), 2500);
+    setTimeout(async () => {
+      try {
+        // Fetch or sync available sensor counts
+        const syncSteps = 2450;
+        await WLRepository.addActivityRecord({
+          steps: syncSteps,
+          exerciseMin: 25,
+          caloriesBurned: 140,
+          activityType: 'Health Connect Auto-Sync',
+          source: 'Health Connect',
+        });
+        setHealthConnectStatus('synced');
+        const [updatedSum, updatedRecs] = await Promise.all([
+          WLRepository.getTodayActivity(),
+          WLRepository.getActivityRecords(),
+        ]);
+        setTodaySummary(updatedSum);
+        setRecords(updatedRecs);
+        onActivityUpdated?.();
+      } catch (err) {
+        console.warn('Health Connect sync failed:', err);
+        setHealthConnectStatus('idle');
+      } finally {
+        setTimeout(() => setHealthConnectStatus('idle'), 2500);
+      }
     }, 1200);
   };
 
-  const handleSaveActivity = (e: React.FormEvent) => {
+  const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     const steps = parseInt(stepsInput) || 0;
     const min = parseInt(minutesInput) || 0;
     const cal = parseInt(caloriesInput) || 0;
 
-    WLRepository.addActivityRecord({
-      steps,
-      exerciseMin: min,
-      caloriesBurned: cal,
-      activityType: selectedType,
-      source: 'Manual',
-    });
+    try {
+      await WLRepository.addActivityRecord({
+        steps,
+        exerciseMin: min,
+        caloriesBurned: cal,
+        activityType: selectedType,
+        source: 'Manual',
+      });
 
-    setTodaySummary(WLRepository.getTodayActivity());
-    setRecords(WLRepository.getActivityRecords());
-    setShowLogModal(false);
-    setStepsInput('');
-    onActivityUpdated?.();
+      const [updatedSum, updatedRecs] = await Promise.all([
+        WLRepository.getTodayActivity(),
+        WLRepository.getActivityRecords(),
+      ]);
+      setTodaySummary(updatedSum);
+      setRecords(updatedRecs);
+      setShowLogModal(false);
+      setStepsInput('');
+      setError(null);
+      onActivityUpdated?.();
+    } catch (err) {
+      console.warn('Save activity failed:', err);
+      setError('Failed to save activity. Please try again.');
+    }
   };
 
   return (
@@ -175,6 +217,13 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
                 Cancel
               </button>
             </div>
+
+            {error && (
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
             <div>
               <label className="text-xs font-semibold text-[#4C5F55] block mb-1">Workout Type</label>

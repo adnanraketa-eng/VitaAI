@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, Plus, Clock, ChevronDown, ChevronUp, 
   Sparkles, Calendar, Headphones, FileText, ChevronLeft, ChevronRight,
@@ -36,15 +36,39 @@ export function WLDailyAnalysisHistory({
     ? 'Yesterday' 
     : selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
-  // Query real data from WLRepository for the selected day
-  const mealsForDay = useMemo(() => {
-    return WLRepository.getMealsForDate(selectedDate);
-  }, [selectedDate]);
-
   const targetKcal = settings.dailyCalorieGoalKcal || 1800;
 
-  const nutritionSummary: WLDailyNutritionSummary = useMemo(() => {
-    return WLRepository.getNutritionSummaryForDate(selectedDate, targetKcal);
+  // Real data from WLRepository for the selected day
+  const [mealsForDay, setMealsForDay] = useState<WLMealEntry[]>([]);
+  const [nutritionSummary, setNutritionSummary] = useState<WLDailyNutritionSummary>({
+    calories: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    fiberG: 0,
+    waterL: 0,
+    analysesCount: 0,
+    remainingCalories: targetKcal,
+  });
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      WLRepository.getMealsForDate(selectedDate),
+      WLRepository.getNutritionSummaryForDate(selectedDate, targetKcal),
+    ])
+      .then(([meals, summary]) => {
+        if (active) {
+          setMealsForDay(meals);
+          setNutritionSummary(summary);
+        }
+      })
+      .catch((err) => {
+        console.warn('WLDailyAnalysisHistory load data error:', err);
+      });
+    return () => {
+      active = false;
+    };
   }, [selectedDate, targetKcal]);
 
   const analysesCount = useMemo(() => {

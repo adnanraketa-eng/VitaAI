@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Scale, Target, Activity, Footprints, 
   Droplet, Flame, Beef, Utensils, ChevronRight, Check, Sparkles,
-  Wheat, Egg, Leaf
+  Wheat, Egg, Leaf, AlertCircle
 } from 'lucide-react';
 import { WeightLossSettings } from '../../types';
 import { WLRepository } from '../data/WLRepository';
@@ -18,37 +18,63 @@ export function WLSettings({
   onSaveSettings,
   onClose,
 }: Props) {
-  const [localSettings, setLocalSettings] = useState<WeightLossSettings>(() => {
-    const goals = WLRepository.getGoals();
-    return {
-      ...settings,
-      dailyCarbsGoalG: settings.dailyCarbsGoalG ?? goals.dailyCarbsGoalG ?? 200,
-      dailyFatGoalG: settings.dailyFatGoalG ?? goals.dailyFatGoalG ?? 65,
-      dailyFiberGoalG: settings.dailyFiberGoalG ?? goals.dailyFiberGoalG ?? 30,
-    };
-  });
+  const [localSettings, setLocalSettings] = useState<WeightLossSettings>(() => ({
+    ...settings,
+    dailyCarbsGoalG: settings.dailyCarbsGoalG ?? 200,
+    dailyFatGoalG: settings.dailyFatGoalG ?? 65,
+    dailyFiberGoalG: settings.dailyFiberGoalG ?? 30,
+  }));
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSave = () => {
-    WLRepository.updateGoals({
-      dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
-      dailyProteinGoalG: localSettings.dailyProteinGoalG,
-      dailyCarbsGoalG: localSettings.dailyCarbsGoalG ?? 200,
-      dailyFatGoalG: localSettings.dailyFatGoalG ?? 65,
-      dailyFiberGoalG: localSettings.dailyFiberGoalG ?? 30,
-      dailyWaterGoalL: localSettings.dailyWaterGoalL,
-      dailyStepGoal: localSettings.dailyStepGoal,
-      currentWeightLb: localSettings.currentWeightLb,
-      goalWeightLb: localSettings.goalWeightLb,
-      targetPace: localSettings.targetPace,
-    });
-    onSaveSettings(localSettings);
-    setShowSavedToast(true);
-    setTimeout(() => {
-      setShowSavedToast(false);
-      onClose();
-    }, 600);
+  useEffect(() => {
+    let active = true;
+    WLRepository.getGoals()
+      .then((goals) => {
+        if (active && goals) {
+          setLocalSettings((prev) => ({
+            ...prev,
+            dailyCarbsGoalG: prev.dailyCarbsGoalG ?? goals.dailyCarbsGoalG ?? 200,
+            dailyFatGoalG: prev.dailyFatGoalG ?? goals.dailyFatGoalG ?? 65,
+            dailyFiberGoalG: prev.dailyFiberGoalG ?? goals.dailyFiberGoalG ?? 30,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('WLSettings load goals error:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    setErrorMessage(null);
+    try {
+      await WLRepository.updateGoals({
+        dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
+        dailyProteinGoalG: localSettings.dailyProteinGoalG,
+        dailyCarbsGoalG: localSettings.dailyCarbsGoalG ?? 200,
+        dailyFatGoalG: localSettings.dailyFatGoalG ?? 65,
+        dailyFiberGoalG: localSettings.dailyFiberGoalG ?? 30,
+        dailyWaterGoalL: localSettings.dailyWaterGoalL,
+        dailyStepGoal: localSettings.dailyStepGoal,
+        currentWeightLb: localSettings.currentWeightLb,
+        goalWeightLb: localSettings.goalWeightLb,
+        targetPace: localSettings.targetPace,
+      });
+      onSaveSettings(localSettings);
+      setShowSavedToast(true);
+      setTimeout(() => {
+        setShowSavedToast(false);
+        onClose();
+      }, 600);
+    } catch (err) {
+      console.warn('Save settings failed:', err);
+      setErrorMessage('Failed to save settings. Please try again.');
+      setTimeout(() => setErrorMessage(null), 3000);
+    }
   };
 
   return (
@@ -78,6 +104,13 @@ export function WLSettings({
         <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-[#1F7A5C] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in slide-in-from-top-4">
           <Check className="w-4 h-4 stroke-[3]" />
           <span>Settings Saved</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in slide-in-from-top-4">
+          <AlertCircle className="w-4 h-4" />
+          <span>{errorMessage}</span>
         </div>
       )}
 

@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, Utensils, Scale, Droplets, Footprints, 
   Calendar, Bell, ChevronDown, ChevronUp, Flame, Sparkles, Check, Layers
 } from 'lucide-react';
 import { BottomTab, UserSharedProfile } from '../../types';
 import { WLRepository } from '../data/WLRepository';
-import { WLMealEntry } from '../data/WLTypes';
+import { WLMealEntry, WLWeightRecord, WLWaterRecord, WLActivityRecord } from '../data/WLTypes';
 
 interface Props {
   profile: UserSharedProfile;
@@ -45,10 +45,34 @@ export function WLHistory({ profile, onNavigate }: Props) {
   const [expandedDateKey, setExpandedDateKey] = useState<string | null>(null);
 
   // Fetch real records from WLRepository
-  const weightRecords = WLRepository.getWeightRecords();
-  const mealEntries = WLRepository.getMealEntries();
-  const waterRecords = WLRepository.getWaterRecords();
-  const activityRecords = WLRepository.getActivityRecords();
+  const [weightRecords, setWeightRecords] = useState<WLWeightRecord[]>([]);
+  const [mealEntries, setMealEntries] = useState<WLMealEntry[]>([]);
+  const [waterRecords, setWaterRecords] = useState<WLWaterRecord[]>([]);
+  const [activityRecords, setActivityRecords] = useState<WLActivityRecord[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      WLRepository.getWeightRecords(),
+      WLRepository.getMealEntries(),
+      WLRepository.getWaterRecords(),
+      WLRepository.getActivityRecords(),
+    ])
+      .then(([weights, meals, water, acts]) => {
+        if (active) {
+          setWeightRecords(weights);
+          setMealEntries(meals);
+          setWaterRecords(water);
+          setActivityRecords(acts);
+        }
+      })
+      .catch((err) => {
+        console.warn('WLHistory loadData error:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const firstName = profile.fullName.trim().split(' ')[0] || 'User';
 
@@ -87,9 +111,11 @@ export function WLHistory({ profile, onNavigate }: Props) {
 
     return sortedKeys.map((key, index) => {
       const dateObj = dateMap.get(key) || new Date(key);
-      const meals = WLRepository.getMealsForDate(key);
-      const nutrition = WLRepository.getNutritionSummaryForDate(key);
-      const waterL = WLRepository.getWaterForDate(key);
+      const meals = mealEntries.filter((m) => new Date(m.loggedAt).toISOString().split('T')[0] === key);
+      const calories = meals.reduce((acc, m) => acc + (m.calories || 0), 0);
+      const proteinG = meals.reduce((acc, m) => acc + (m.proteinG || 0), 0);
+      const dayWater = waterRecords.filter((w) => new Date(w.loggedAt).toISOString().split('T')[0] === key);
+      const waterL = parseFloat(dayWater.reduce((acc, w) => acc + (w.amountL || 0), 0).toFixed(2));
 
       // Activity calculation for this date
       const dayActivities = activityRecords.filter((a) => {
@@ -117,9 +143,9 @@ export function WLHistory({ profile, onNavigate }: Props) {
 
       // Dynamic status calculation
       let status: 'Complete' | 'On target' | 'Almost There' = 'Almost There';
-      if (meals.length >= 3 || nutrition.calories >= 1800) {
+      if (meals.length >= 3 || calories >= 1800) {
         status = 'Complete';
-      } else if (meals.length >= 1 || nutrition.calories >= 400) {
+      } else if (meals.length >= 1 || calories >= 400) {
         status = 'On target';
       }
 
@@ -149,8 +175,8 @@ export function WLHistory({ profile, onNavigate }: Props) {
         dateTitle: dayTitle,
         dayOfWeek,
         meals,
-        calories: nutrition.calories,
-        proteinG: nutrition.proteinG,
+        calories,
+        proteinG,
         waterL,
         exerciseMin,
         weightLb: currentWeight,

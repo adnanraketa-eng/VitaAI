@@ -41,8 +41,22 @@ export function WLFood({
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
-  const [todayMeals, setTodayMeals] = useState<WLMealEntry[]>(() => WLRepository.getTodayMeals());
+  const [todayMeals, setTodayMeals] = useState<WLMealEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    WLRepository.getTodayMeals()
+      .then((meals) => {
+        if (active) setTodayMeals(meals);
+      })
+      .catch((err) => {
+        console.warn('WLFood fetch todayMeals error:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const stopCameraStream = () => {
     if (mediaStreamRef.current) {
@@ -154,7 +168,7 @@ export function WLFood({
     reader.readAsDataURL(file);
   };
 
-  const handleSaveMeal = (e: React.FormEvent) => {
+  const handleSaveMeal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foodName.trim()) {
       setError('Please provide a food name or title.');
@@ -165,28 +179,37 @@ export function WLFood({
     const c = parseInt(carbsInput) || 0;
     const f = parseInt(fatInput) || 0;
 
-    const newMeal = WLRepository.addMealEntry({
-      type: mealType,
-      name: foodName.trim(),
-      calories: cal,
-      proteinG: p,
-      carbsG: c,
-      fatG: f,
-      serving: 'per 1 serving',
-      notes: notes.trim() || undefined,
-      photoUrl: capturedImage || undefined,
-      aiStatus: 'Not analyzed',
-    });
+    try {
+      const newMeal = await WLRepository.addMealEntry({
+        type: mealType,
+        name: foodName.trim(),
+        calories: cal,
+        proteinG: p,
+        carbsG: c,
+        fatG: f,
+        serving: 'per 1 serving',
+        notes: notes.trim() || undefined,
+        photoUrl: capturedImage || undefined,
+        aiStatus: 'Not analyzed',
+      });
 
-    setTodayMeals([newMeal, ...todayMeals]);
-    onMealAdded?.();
-    onClose();
+      setTodayMeals([newMeal, ...todayMeals]);
+      onMealAdded?.();
+      onClose();
+    } catch (err) {
+      setError('Failed to save meal. Please try again.');
+    }
   };
 
-  const handleDeleteMeal = (id: string) => {
-    WLRepository.deleteMealEntry(id);
-    setTodayMeals((prev) => prev.filter((m) => m.id !== id));
-    onMealAdded?.();
+  const handleDeleteMeal = async (id: string) => {
+    try {
+      await WLRepository.deleteMealEntry(id);
+      setTodayMeals((prev) => prev.filter((m) => m.id !== id));
+      onMealAdded?.();
+    } catch (err) {
+      console.warn('Delete meal entry failed:', err);
+      setError('Failed to delete meal. Please try again.');
+    }
   };
 
   if (isLiveCameraOpen && !capturedImage) {

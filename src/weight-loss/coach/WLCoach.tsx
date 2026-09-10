@@ -14,23 +14,33 @@ interface Props {
 }
 
 export function WLCoach({ profile, settings, onNavigate }: Props) {
-  const [messages, setMessages] = useState<WLCoachMessage[]>(() => {
-    const existing = WLRepository.getCoachMessages();
-    if (existing.length > 0) return existing;
-    
-    // Initial greeting if no messages yet
-    const initial: WLCoachMessage = {
-      id: 'init',
-      sender: 'ai',
-      text: `Hello ${profile.fullName.trim().split(' ')[0] || 'there'}! I'm your dedicated Weight Loss & Nutrition Coach. I have your current weight (${settings.currentWeightLb} lb), goal (${settings.goalWeightLb} lb), and daily targets loaded. How can I support your deficit and meal plan today?`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    return [initial];
-  });
+  const initialGreeting: WLCoachMessage = {
+    id: 'init',
+    sender: 'ai',
+    text: `Hello ${profile.fullName.trim().split(' ')[0] || 'there'}! I'm your dedicated Weight Loss & Nutrition Coach. I have your current weight (${settings.currentWeightLb} lb), goal (${settings.goalWeightLb} lb), and daily targets loaded. How can I support your deficit and meal plan today?`,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
 
+  const [messages, setMessages] = useState<WLCoachMessage[]>([initialGreeting]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    WLRepository.getCoachMessages()
+      .then((existing) => {
+        if (active && existing.length > 0) {
+          setMessages(existing);
+        }
+      })
+      .catch((err) => {
+        console.warn('WLCoach load messages error:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,18 +57,22 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
     const query = textToSend || input;
     if (!query.trim() || isLoading) return;
 
-    const userMsg = WLRepository.addCoachMessage('user', query.trim());
-    setMessages((prev) => [...prev, userMsg]);
-    if (!textToSend) setInput('');
-    setIsLoading(true);
+    try {
+      const userMsg = await WLRepository.addCoachMessage('user', query.trim());
+      setMessages((prev) => [...prev, userMsg]);
+      if (!textToSend) setInput('');
+      setIsLoading(true);
 
-    // Prepare real context from repository
-    const latestWeight = WLRepository.getLatestWeight()?.weightLb || settings.currentWeightLb;
-    const todaySummary = WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal);
-    const todayWater = WLRepository.getTodayWaterL();
-    const todayActivity = WLRepository.getTodayActivity();
+      // Prepare real context from repository
+      const [latestWeightRecord, todaySummary, todayWater, todayActivity] = await Promise.all([
+        WLRepository.getLatestWeight(),
+        WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal),
+        WLRepository.getTodayWaterL(),
+        WLRepository.getTodayActivity(),
+      ]);
+      const latestWeight = latestWeightRecord?.weightLb || settings.currentWeightLb;
 
-    const systemContext = `
+      const systemContext = `
 You are the VitaAI Weight Loss and Nutrition Coach.
 User: ${profile.fullName} (Age: ${profile.age || 'N/A'}, Sex: ${profile.gender || 'N/A'}, Height: ${profile.heightCm || 'N/A'}cm).
 Current Weight: ${latestWeight} lb | Goal Weight: ${settings.goalWeightLb} lb | Target Pace: ${settings.targetPace}.
@@ -74,51 +88,59 @@ Guidelines:
 - Give compassionate, science-grounded, empathetic nutritional and weight-loss advice.
 - Stay strictly in Weight Loss mode; do not introduce unsolicited Cancer or Diabetes medical treatments.
 - Keep response concise, structured with bullet points where helpful, and encouraging.
-    `.trim();
+      `.trim();
 
-    try {
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `${systemContext}\n\nUser Question: ${query.trim()}`,
-        }),
-      });
+      try {
+        const response = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `${systemContext}\n\nUser Question: ${query.trim()}`,
+          }),
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        const replyText = data.text || data.response || data.message || "I'm analyzing your weight loss journey. Focus on steady protein intake and hydration today!";
-        const aiMsg = WLRepository.addCoachMessage('ai', replyText);
+        if (response.ok) {
+          const data = await response.json();
+          const replyText = data.text || data.response || data.message || "I'm analyzing your weight loss journey. Focus on steady protein intake and hydration today!";
+          const aiMsg = await WLRepository.addCoachMessage('ai', replyText);
+          setMessages((prev) => [...prev, aiMsg]);
+        } else {
+          throw new Error('AI service error');
+        }
+      } catch (err) {
+        // Fallback context-aware response
+        let fallback = `Based on your daily goal of ${settings.dailyCalorieGoalKcal} kcal and ${settings.dailyProteinGoalG}g of protein, `;
+        if (todaySummary.proteinG < settings.dailyProteinGoalG * 0.5) {
+          fallback += `you still need ${settings.dailyProteinGoalG - todaySummary.proteinG}g of protein today. Prioritize lean chicken, Greek yogurt, or a whey shake with your next meal!`;
+        } else {
+          fallback += `you're on great track with your macros today. Maintain consistent hydration (${todayWater}/${settings.dailyWaterGoalL}L logged) to stay energized.`;
+        }
+
+        const aiMsg = await WLRepository.addCoachMessage('ai', fallback);
         setMessages((prev) => [...prev, aiMsg]);
-      } else {
-        throw new Error('AI service error');
+      } finally {
+        setIsLoading(false);
       }
     } catch (err) {
-      // Fallback context-aware response
-      let fallback = `Based on your daily goal of ${settings.dailyCalorieGoalKcal} kcal and ${settings.dailyProteinGoalG}g of protein, `;
-      if (todaySummary.proteinG < settings.dailyProteinGoalG * 0.5) {
-        fallback += `you still need ${settings.dailyProteinGoalG - todaySummary.proteinG}g of protein today. Prioritize lean chicken, Greek yogurt, or a whey shake with your next meal!`;
-      } else {
-        fallback += `you're on great track with your macros today. Maintain consistent hydration (${todayWater}/${settings.dailyWaterGoalL}L logged) to stay energized.`;
-      }
-
-      const aiMsg = WLRepository.addCoachMessage('ai', fallback);
-      setMessages((prev) => [...prev, aiMsg]);
-    } finally {
+      console.warn('Error sending coach message:', err);
       setIsLoading(false);
     }
   };
 
-  const handleClearHistory = () => {
-    WLRepository.clearCoachMessages();
-    setMessages([
-      {
-        id: `fresh_${Date.now()}`,
-        sender: 'ai',
-        text: `Conversation cleared. How can I assist your weight loss journey today, ${profile.fullName.trim().split(' ')[0]}?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
+  const handleClearHistory = async () => {
+    try {
+      await WLRepository.clearCoachMessages();
+      setMessages([
+        {
+          id: `fresh_${Date.now()}`,
+          sender: 'ai',
+          text: `Conversation cleared. How can I assist your weight loss journey today, ${profile.fullName.trim().split(' ')[0]}?`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } catch (err) {
+      console.warn('Clear coach history failed:', err);
+    }
   };
 
   const firstName = profile.fullName.trim().split(' ')[0] || 'User';

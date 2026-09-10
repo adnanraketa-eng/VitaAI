@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Scale, Plus, Calendar, TrendingDown, TrendingUp, 
   Trash2, Check, AlertCircle 
@@ -13,14 +13,31 @@ interface Props {
 }
 
 export function WLWeight({ onClose, onWeightUpdated, goalWeightLb }: Props) {
-  const [records, setRecords] = useState<WLWeightRecord[]>(() => WLRepository.getWeightRecords());
+  const [records, setRecords] = useState<WLWeightRecord[]>([]);
+  const [avg7Day, setAvg7Day] = useState<number | null>(null);
   const [weightInput, setWeightInput] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadData = async () => {
+    try {
+      const [recs, avg] = await Promise.all([
+        WLRepository.getWeightRecords(),
+        WLRepository.get7DayWeightAverage(),
+      ]);
+      setRecords(recs);
+      setAvg7Day(avg);
+    } catch (err) {
+      console.warn('WLWeight loadData error:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const latestRecord = records[0] || null;
-  const avg7Day = WLRepository.get7DayWeightAverage();
 
   // Calculate trend from last 2 records
   let trend: 'down' | 'up' | 'stable' | null = null;
@@ -32,7 +49,7 @@ export function WLWeight({ onClose, onWeightUpdated, goalWeightLb }: Props) {
     else trend = 'stable';
   }
 
-  const handleAddWeight = (e: React.FormEvent) => {
+  const handleAddWeight = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(weightInput);
     if (isNaN(val) || val <= 50 || val >= 600) {
@@ -40,22 +57,34 @@ export function WLWeight({ onClose, onWeightUpdated, goalWeightLb }: Props) {
       return;
     }
 
-    const newRecord = WLRepository.addWeightRecord(val, noteInput.trim() || undefined);
-    const updated = [newRecord, ...records];
-    setRecords(updated);
-    setWeightInput('');
-    setNoteInput('');
-    setError(null);
-    setShowAddForm(false);
-    onWeightUpdated?.(val);
+    try {
+      const newRecord = await WLRepository.addWeightRecord(val, noteInput.trim() || undefined);
+      const updated = [newRecord, ...records];
+      setRecords(updated);
+      setWeightInput('');
+      setNoteInput('');
+      setError(null);
+      setShowAddForm(false);
+      onWeightUpdated?.(val);
+      const newAvg = await WLRepository.get7DayWeightAverage();
+      setAvg7Day(newAvg);
+    } catch (err) {
+      setError('Failed to save weight record. Please check your connection.');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    WLRepository.deleteWeightRecord(id);
-    const updated = records.filter((r) => r.id !== id);
-    setRecords(updated);
-    if (updated[0]) {
-      onWeightUpdated?.(updated[0].weightLb);
+  const handleDelete = async (id: string) => {
+    try {
+      await WLRepository.deleteWeightRecord(id);
+      const updated = records.filter((r) => r.id !== id);
+      setRecords(updated);
+      if (updated[0]) {
+        onWeightUpdated?.(updated[0].weightLb);
+      }
+      const newAvg = await WLRepository.get7DayWeightAverage();
+      setAvg7Day(newAvg);
+    } catch (err) {
+      console.warn('Delete weight record failed:', err);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Droplets, Plus, RotateCcw, Check, 
   Calendar, Trash2 
@@ -13,10 +13,27 @@ interface Props {
 }
 
 export function WLWater({ goalWaterL, onClose, onWaterUpdated }: Props) {
-  const [todayWater, setTodayWater] = useState<number>(() => WLRepository.getTodayWaterL());
-  const [records, setRecords] = useState<WLWaterRecord[]>(() => WLRepository.getWaterRecords());
+  const [todayWater, setTodayWater] = useState<number>(0);
+  const [records, setRecords] = useState<WLWaterRecord[]>([]);
   const [customAmountMl, setCustomAmountMl] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      const [water, recs] = await Promise.all([
+        WLRepository.getTodayWaterL(),
+        WLRepository.getWaterRecords(),
+      ]);
+      setTodayWater(water);
+      setRecords(recs);
+    } catch (err) {
+      console.warn('WLWater loadData error:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const percent = Math.min(100, Math.round((todayWater / goalWaterL) * 100));
 
@@ -25,13 +42,21 @@ export function WLWater({ goalWaterL, onClose, onWaterUpdated }: Props) {
     setTimeout(() => setToastMsg(null), 1500);
   };
 
-  const handleAddWaterL = (amountL: number) => {
-    WLRepository.addWater(amountL);
-    const updatedTotal = WLRepository.getTodayWaterL();
-    setTodayWater(updatedTotal);
-    setRecords(WLRepository.getWaterRecords());
-    showToast(`+${(amountL * 1000).toFixed(0)} ml logged!`);
-    onWaterUpdated?.();
+  const handleAddWaterL = async (amountL: number) => {
+    try {
+      await WLRepository.addWater(amountL);
+      const [updatedTotal, updatedRecords] = await Promise.all([
+        WLRepository.getTodayWaterL(),
+        WLRepository.getWaterRecords(),
+      ]);
+      setTodayWater(updatedTotal);
+      setRecords(updatedRecords);
+      showToast(`+${(amountL * 1000).toFixed(0)} ml logged!`);
+      onWaterUpdated?.();
+    } catch (err) {
+      console.warn('Add water failed:', err);
+      showToast('Failed to record water. Please try again.');
+    }
   };
 
   const handleAddCustom = (e: React.FormEvent) => {
@@ -43,12 +68,18 @@ export function WLWater({ goalWaterL, onClose, onWaterUpdated }: Props) {
     }
   };
 
-  const handleResetToday = () => {
-    WLRepository.clearTodayWater();
-    setTodayWater(0);
-    setRecords(WLRepository.getWaterRecords());
-    showToast('Today’s water reset.');
-    onWaterUpdated?.();
+  const handleResetToday = async () => {
+    try {
+      await WLRepository.clearTodayWater();
+      const updatedRecords = await WLRepository.getWaterRecords();
+      setTodayWater(0);
+      setRecords(updatedRecords);
+      showToast('Today’s water reset.');
+      onWaterUpdated?.();
+    } catch (err) {
+      console.warn('Reset water failed:', err);
+      showToast('Failed to reset water. Please try again.');
+    }
   };
 
   return (
