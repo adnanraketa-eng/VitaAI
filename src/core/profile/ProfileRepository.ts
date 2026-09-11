@@ -221,8 +221,8 @@ export const ProfileRepository = {
           const res = (error as { context?: Response }).context;
           if (res && typeof res.json === 'function') {
             const body = await res.json();
-            if (body && body.error) {
-              errorMessage = body.error;
+            if (body && (body.error || body.message)) {
+              errorMessage = body.error || body.message;
             }
           }
         } else if (error.message) {
