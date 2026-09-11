@@ -4,7 +4,11 @@ import { supabase } from '../core/supabase';
 
 type AuthMode = 'signin' | 'signup';
 
-export function AuthScreen() {
+interface AuthScreenProps {
+  initialNotice?: string | null;
+}
+
+export function AuthScreen({ initialNotice }: AuthScreenProps = {}) {
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,7 +16,19 @@ export function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(() => {
+    if (initialNotice) return initialNotice;
+    try {
+      const stored = sessionStorage.getItem('vita_auth_notice');
+      if (stored) {
+        sessionStorage.removeItem('vita_auth_notice');
+        return stored;
+      }
+    } catch {
+      // Storage unavailable
+    }
+    return null;
+  });
 
   const handleSwitchMode = (newMode: AuthMode) => {
     setMode(newMode);

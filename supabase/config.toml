@@ -1,0 +1,4 @@
+# Supabase Edge Functions Configuration
+
+[functions.delete-account]
+verify_jwt = true

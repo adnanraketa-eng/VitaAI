@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { 
   ArrowLeft, Scale, Target, Activity, Footprints, 
-  Droplet, Flame, Beef, Utensils, ChevronRight, Check, Sparkles 
+  Droplet, Flame, Beef, Utensils, ChevronRight, Check, Sparkles,
+  Trash2, Loader2, AlertCircle
 } from 'lucide-react';
 import { WeightLossSettings } from '../../types';
+import { ProfileRepository } from '../../core/profile';
 
 interface Props {
   settings: WeightLossSettings;
@@ -19,6 +21,30 @@ export function WeightLossSettingsModal({
   const [localSettings, setLocalSettings] = useState<WeightLossSettings>({ ...settings });
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+
+  // Delete account state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    setDeleteError(null);
+    setIsDeleting(true);
+    try {
+      await ProfileRepository.deleteAccount();
+      try {
+        sessionStorage.setItem('vita_auth_notice', 'Your account has been deleted.');
+      } catch {
+        // storage fallback
+      }
+      onClose();
+    } catch (err: unknown) {
+      setIsDeleting(false);
+      const message =
+        err instanceof Error ? err.message : 'An error occurred while deleting your account.';
+      setDeleteError(message);
+    }
+  };
 
   const handleSave = () => {
     onSaveSettings(localSettings);
@@ -310,7 +336,85 @@ export function WeightLossSettingsModal({
             </div>
           </div>
         </div>
+
+        {/* Delete Account */}
+        <div className="pt-2 pb-6">
+          <button
+            type="button"
+            id="btn-delete-account-modal"
+            onClick={() => {
+              setDeleteError(null);
+              setShowDeleteConfirm(true);
+            }}
+            className="w-full py-3.5 px-4 bg-white border border-[#D65A5A]/30 text-[#D65A5A] hover:bg-[#FFF1F0] rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
+          >
+            <Trash2 className="w-4 h-4 text-[#D65A5A]" />
+            <span>Delete Account</span>
+          </button>
+        </div>
       </div>
+
+      {/* Delete Account Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div
+          id="modal-delete-account-confirm-dialog"
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200"
+        >
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-xl border border-[#DCE6E0] space-y-4">
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-[#1B2B24]">Delete Account?</h3>
+              <p className="text-xs text-[#4C5F55] leading-relaxed">
+                This will permanently delete your VitaAI account and associated data. This action cannot be undone.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div
+                id="delete-account-error-msg-modal"
+                className="p-3 bg-[#FFF1F0] border border-[#D65A5A]/30 rounded-xl text-xs text-[#D65A5A] flex items-center gap-2"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 text-[#D65A5A]" />
+                <span className="font-medium">{deleteError}</span>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                id="btn-cancel-delete-modal"
+                disabled={isDeleting}
+                onClick={() => {
+                  if (!isDeleting) {
+                    setShowDeleteConfirm(false);
+                    setDeleteError(null);
+                  }
+                }}
+                className="flex-1 py-2.5 px-4 bg-[#F6FAF7] border border-[#DCE6E0] text-[#4C5F55] hover:bg-[#EFF6F1] rounded-xl font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-delete-modal"
+                disabled={isDeleting}
+                onClick={handleDeleteAccount}
+                className="flex-1 py-2.5 px-4 bg-[#D65A5A] hover:bg-[#C04848] text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Account</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -193,4 +193,71 @@ export const ProfileRepository = {
 
     return mapRowToSharedProfile(data as ProfileRow);
   },
+
+  /**
+   * Deletes the authenticated user's account via the `delete-account` Supabase Edge Function.
+   * Cleans up local client session and caches upon successful completion.
+   */
+  async deleteAccount(): Promise<{ success: boolean; message: string }> {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session) {
+      throw new Error('No active session found. Please sign in again.');
+    }
+
+    const { data, error } = await supabase.functions.invoke('delete-account', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (error) {
+      let errorMessage = 'Failed to delete account. Please try again.';
+      try {
+        if (error && typeof error === 'object' && 'context' in error) {
+          const res = (error as { context?: Response }).context;
+          if (res && typeof res.json === 'function') {
+            const body = await res.json();
+            if (body && body.error) {
+              errorMessage = body.error;
+            }
+          }
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      } catch {
+        if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (data && data.error) {
+      throw new Error(data.error);
+    }
+
+    // Clean up relevant client caches for the deleted account
+    try {
+      localStorage.removeItem('vitaai_onboarding_draft_v1');
+      localStorage.removeItem('vita_onboarding_completed');
+    } catch {
+      // Non-blocking storage cleanup
+    }
+
+    // Terminate local Supabase session
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore signOut errors if session was already invalidated server-side
+    }
+
+    return {
+      success: true,
+      message: (data && data.message) || 'Your account has been deleted.',
+    };
+  },
 };
