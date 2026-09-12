@@ -7,7 +7,8 @@ const ONBOARDING_DRAFT_KEY = 'vita_onboarding_draft';
 export const OnboardingRepository = {
   /**
    * Checks whether the current authenticated user has an active session and
-   * an existing profile in Supabase. Fails closed to false if unauthenticated.
+   * complete onboarding data in Supabase. Fails closed to false if unauthenticated
+   * or if required onboarding fields are missing.
    */
   async checkOnboardingCompleted(): Promise<boolean> {
     try {
@@ -15,8 +16,54 @@ export const OnboardingRepository = {
       if (authError || !authData?.user) {
         return false;
       }
+      const user = authData.user;
+
       const profile = await ProfileRepository.getProfile();
-      return profile !== null && Boolean(profile.id);
+      if (!profile) {
+        return false;
+      }
+
+      // 1. Shared profile must have required onboarding fields populated (not just the basic auto-created row)
+      const hasValidSharedProfile = Boolean(
+        profile.full_name &&
+        profile.full_name.trim().length > 0 &&
+        profile.date_of_birth &&
+        profile.date_of_birth.trim().length > 0 &&
+        profile.gender &&
+        profile.gender.trim().length > 0 &&
+        profile.height_cm !== null &&
+        profile.height_cm !== undefined &&
+        !isNaN(Number(profile.height_cm)) &&
+        Number(profile.height_cm) > 0
+      );
+
+      if (!hasValidSharedProfile) {
+        return false;
+      }
+
+      // 2. Weight Loss profile must exist and have current_weight_lb and goal_weight_lb populated
+      const { data: wlpData, error: wlpError } = await supabase
+        .from('weight_loss_profiles')
+        .select('current_weight_lb, goal_weight_lb')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (wlpError || !wlpData) {
+        return false;
+      }
+
+      const hasValidWeightLossProfile = Boolean(
+        wlpData.current_weight_lb !== null &&
+        wlpData.current_weight_lb !== undefined &&
+        !isNaN(Number(wlpData.current_weight_lb)) &&
+        Number(wlpData.current_weight_lb) > 0 &&
+        wlpData.goal_weight_lb !== null &&
+        wlpData.goal_weight_lb !== undefined &&
+        !isNaN(Number(wlpData.goal_weight_lb)) &&
+        Number(wlpData.goal_weight_lb) > 0
+      );
+
+      return hasValidWeightLossProfile;
     } catch {
       return false;
     }

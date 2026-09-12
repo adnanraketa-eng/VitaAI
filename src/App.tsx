@@ -35,10 +35,13 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true;
+    let latestRequestId = 0;
 
     async function evaluateAuthAndOnboarding(activeSession: Session | null) {
+      const currentRequestId = ++latestRequestId;
+
       if (!activeSession) {
-        if (isMounted) {
+        if (isMounted && currentRequestId === latestRequestId) {
           setSession(null);
           setIsOnboarded(false);
           setIsAuthLoading(false);
@@ -46,19 +49,21 @@ export default function App() {
         return;
       }
 
-      if (isMounted) {
-        setSession(activeSession);
+      if (isMounted && currentRequestId === latestRequestId) {
+        setIsAuthLoading(true);
       }
 
       try {
         const completed = await OnboardingRepository.checkOnboardingCompleted();
-        if (!isMounted) return;
+        if (!isMounted || currentRequestId !== latestRequestId) return;
+
+        setSession(activeSession);
         setIsOnboarded(completed);
 
         if (completed) {
           try {
             const userProfile = await ProfileRepository.getProfile();
-            if (userProfile && isMounted) {
+            if (userProfile && isMounted && currentRequestId === latestRequestId) {
               const computedAge = calculateAge(userProfile.dateOfBirth);
               setSharedProfile((prev) => ({
                 ...prev,
@@ -75,11 +80,12 @@ export default function App() {
           }
         }
       } catch {
-        if (isMounted) {
+        if (isMounted && currentRequestId === latestRequestId) {
+          setSession(activeSession);
           setIsOnboarded(false);
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && currentRequestId === latestRequestId) {
           setIsAuthLoading(false);
         }
       }
