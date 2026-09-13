@@ -54,7 +54,7 @@ export default function App() {
       }
 
       try {
-        const completed = await OnboardingRepository.checkOnboardingCompleted();
+        const completed = await OnboardingRepository.checkOnboardingCompleted(activeSession.user.id);
         if (!isMounted || currentRequestId !== latestRequestId) return;
 
         setSession(activeSession);

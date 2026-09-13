@@ -6,64 +6,33 @@ const ONBOARDING_DRAFT_KEY = 'vita_onboarding_draft';
 
 export const OnboardingRepository = {
   /**
-   * Checks whether the current authenticated user has an active session and
-   * complete onboarding data in Supabase. Fails closed to false if unauthenticated
-   * or if required onboarding fields are missing.
+   * Checks whether the authenticated user has a record in public.profiles.
+   * Returns true if a profiles record exists (onboarding completed),
+   * or false if no profile record exists (new user needs onboarding).
+   * Fails closed to false if unauthenticated or on error.
    */
-  async checkOnboardingCompleted(): Promise<boolean> {
+  async checkOnboardingCompleted(userId?: string): Promise<boolean> {
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData?.user) {
-        return false;
-      }
-      const user = authData.user;
-
-      const profile = await ProfileRepository.getProfile();
-      if (!profile) {
-        return false;
+      let targetUserId = userId;
+      if (!targetUserId) {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError || !authData?.user) {
+          return false;
+        }
+        targetUserId = authData.user.id;
       }
 
-      // 1. Shared profile must have required onboarding fields populated (not just the basic auto-created row)
-      const hasValidSharedProfile = Boolean(
-        profile.full_name &&
-        profile.full_name.trim().length > 0 &&
-        profile.date_of_birth &&
-        profile.date_of_birth.trim().length > 0 &&
-        profile.gender &&
-        profile.gender.trim().length > 0 &&
-        profile.height_cm !== null &&
-        profile.height_cm !== undefined &&
-        !isNaN(Number(profile.height_cm)) &&
-        Number(profile.height_cm) > 0
-      );
-
-      if (!hasValidSharedProfile) {
-        return false;
-      }
-
-      // 2. Weight Loss profile must exist and have current_weight_lb and goal_weight_lb populated
-      const { data: wlpData, error: wlpError } = await supabase
-        .from('weight_loss_profiles')
-        .select('current_weight_lb, goal_weight_lb')
-        .eq('user_id', user.id)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', targetUserId)
         .maybeSingle();
 
-      if (wlpError || !wlpData) {
+      if (error || !data) {
         return false;
       }
 
-      const hasValidWeightLossProfile = Boolean(
-        wlpData.current_weight_lb !== null &&
-        wlpData.current_weight_lb !== undefined &&
-        !isNaN(Number(wlpData.current_weight_lb)) &&
-        Number(wlpData.current_weight_lb) > 0 &&
-        wlpData.goal_weight_lb !== null &&
-        wlpData.goal_weight_lb !== undefined &&
-        !isNaN(Number(wlpData.goal_weight_lb)) &&
-        Number(wlpData.goal_weight_lb) > 0
-      );
-
-      return hasValidWeightLossProfile;
+      return true;
     } catch {
       return false;
     }
