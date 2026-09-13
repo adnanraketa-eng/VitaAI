@@ -67,7 +67,7 @@ export class WLRepository {
     const user = await requireAuthUser();
     const { data, error } = await supabase
       .from('weight_records')
-      .select('id, weight_lb, recorded_at, note')
+      .select('id, weight_lb, recorded_at')
       .eq('user_id', user.id)
       .order('recorded_at', { ascending: false });
 
@@ -76,7 +76,6 @@ export class WLRepository {
       id: String(row.id),
       weightLb: Number(row.weight_lb),
       recordedAt: row.recorded_at,
-      note: row.note || undefined,
     }));
   }
 
@@ -89,9 +88,8 @@ export class WLRepository {
         user_id: user.id,
         weight_lb: weightLb,
         recorded_at: recordedAt,
-        note: note || null,
       })
-      .select('id, weight_lb, recorded_at, note')
+      .select('id, weight_lb, recorded_at')
       .single();
 
     if (error) throw error;
@@ -99,7 +97,7 @@ export class WLRepository {
       id: String(data.id),
       weightLb: Number(data.weight_lb),
       recordedAt: data.recorded_at,
-      note: data.note || undefined,
+      note,
     };
   }
 
@@ -439,7 +437,6 @@ export class WLRepository {
     };
     if (goal.currentWeightLb !== undefined) profileUpdates.current_weight_lb = goal.currentWeightLb;
     if (goal.goalWeightLb !== undefined) profileUpdates.goal_weight_lb = goal.goalWeightLb;
-    if (goal.startWeightLb !== undefined) profileUpdates.start_weight_lb = goal.startWeightLb;
     if (goal.targetPace !== undefined) profileUpdates.target_pace = goal.targetPace;
     if (goal.dailyCalorieGoalKcal !== undefined)
       profileUpdates.daily_calorie_target = Math.round(goal.dailyCalorieGoalKcal);

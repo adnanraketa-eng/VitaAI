@@ -93,39 +93,46 @@ export function WLSettings({
   }, []);
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     setIsSaving(true);
     setErrorMessage(null);
+
     try {
-      const updatedGoals = await WLRepository.updateGoals({
+      const saved = await WLRepository.updateGoals({
         currentWeightLb: localSettings.currentWeightLb,
         goalWeightLb: localSettings.goalWeightLb,
         startWeightLb: localSettings.startWeightLb,
         targetPace: localSettings.targetPace,
         dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
         dailyProteinGoalG: localSettings.dailyProteinGoalG,
-        dailyCarbsGoalG: localSettings.dailyCarbsGoalG ?? 200,
-        dailyFatGoalG: localSettings.dailyFatGoalG ?? 65,
-        dailyFiberGoalG: localSettings.dailyFiberGoalG ?? 30,
+        dailyCarbsGoalG: localSettings.dailyCarbsGoalG,
+        dailyFatGoalG: localSettings.dailyFatGoalG,
+        dailyFiberGoalG: localSettings.dailyFiberGoalG,
         dailyWaterGoalL: localSettings.dailyWaterGoalL,
         dailyStepGoal: localSettings.dailyStepGoal,
         dietaryPreferences: localSettings.dietaryPreferences,
-        healthyHabits: healthyHabits.length > 0 ? healthyHabits : undefined,
+        healthyHabits: healthyHabits,
       });
-      if (updatedGoals?.healthyHabits) {
-        setHealthyHabits(updatedGoals.healthyHabits);
-      }
-      onSaveSettings(localSettings);
+
+      // Only update parent state after Supabase succeeds.
+      onSaveSettings(saved);
+
       setIsSaved(true);
       setShowSavedToast(true);
-      setTimeout(() => {
+
+      window.setTimeout(() => {
         setIsSaved(false);
         setShowSavedToast(false);
       }, 2500);
-    } catch (err) {
-      console.error('Save settings failed:', err);
-      const msg = err instanceof Error ? err.message : 'Failed to save settings. Please try again.';
-      setErrorMessage(msg);
-      setTimeout(() => setErrorMessage(null), 4000);
+    } catch (error) {
+      console.error('Weight Loss Settings save failed:', error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save Weight Loss settings.'
+      );
     } finally {
       setIsSaving(false);
     }

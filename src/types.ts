@@ -19,7 +19,7 @@ export interface WeightLossSettings {
   goalWeightLb: number;
   startWeightLb: number;
   targetPace: string;
-  activityLevel: string;
+  activityLevel?: string;
   dailyStepGoal: number;
   dailyWaterGoalL: number;
   dailyCalorieGoalKcal: number;
@@ -28,6 +28,7 @@ export interface WeightLossSettings {
   dailyFatGoalG?: number;
   dailyFiberGoalG?: number;
   dietaryPreferences: string[];
+  healthyHabits?: { id: string; title: string; completed: boolean }[];
 }
 
 export interface MealItem {

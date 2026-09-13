@@ -57,54 +57,72 @@ export function WLProfile({
   const firstName = localProfile.fullName.trim().split(' ')[0] || 'User';
 
   const handleSaveProfile = async () => {
+    if (isSavingProfile) return;
+
     setIsSavingProfile(true);
     setProfileError(null);
+
     try {
-      const computedAge = calculateAge(localProfile.dob) ?? localProfile.age;
+      const computedAge =
+        calculateAge(localProfile.dob) ?? localProfile.age;
 
-      // 1. Update shared profile in public.profiles using existing ProfileRepository
-      await ProfileRepository.updateProfile({
-        fullName: localProfile.fullName,
-        dateOfBirth: localProfile.dob,
-        gender: localProfile.gender,
-        heightCm: Number(localProfile.heightCm),
-      });
+      const updatedProfile =
+        await ProfileRepository.updateProfile({
+          fullName: localProfile.fullName,
+          dateOfBirth: localProfile.dob,
+          gender: localProfile.gender,
+          heightCm: Number(localProfile.heightCm),
+        });
 
-      // 2. Persist to existing Weight Loss profile backend (weight_loss_profiles) using existing WLRepository
-      await WLRepository.updateGoals({
-        currentWeightLb: localSettings.currentWeightLb,
-        goalWeightLb: localSettings.goalWeightLb,
-        startWeightLb: localSettings.startWeightLb,
-        targetPace: localSettings.targetPace,
-        dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
-        dailyProteinGoalG: localSettings.dailyProteinGoalG,
-        dailyCarbsGoalG: localSettings.dailyCarbsGoalG,
-        dailyFatGoalG: localSettings.dailyFatGoalG,
-        dailyFiberGoalG: localSettings.dailyFiberGoalG,
-        dailyWaterGoalL: localSettings.dailyWaterGoalL,
-        dailyStepGoal: localSettings.dailyStepGoal,
-        dietaryPreferences: localSettings.dietaryPreferences,
-      });
+      const updatedGoals =
+        await WLRepository.updateGoals({
+          currentWeightLb: localSettings.currentWeightLb,
+          goalWeightLb: localSettings.goalWeightLb,
+          startWeightLb: localSettings.startWeightLb,
+          targetPace: localSettings.targetPace,
+          dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
+          dailyProteinGoalG: localSettings.dailyProteinGoalG,
+          dailyCarbsGoalG: localSettings.dailyCarbsGoalG,
+          dailyFatGoalG: localSettings.dailyFatGoalG,
+          dailyFiberGoalG: localSettings.dailyFiberGoalG,
+          dailyWaterGoalL: localSettings.dailyWaterGoalL,
+          dailyStepGoal: localSettings.dailyStepGoal,
+          dietaryPreferences: localSettings.dietaryPreferences,
+          healthyHabits: localSettings.healthyHabits,
+        });
 
-      const updated: UserSharedProfile = {
+      const finalProfile: UserSharedProfile = {
         ...localProfile,
+        fullName: updatedProfile.fullName ?? localProfile.fullName,
+        email: updatedProfile.email ?? localProfile.email,
+        dob: updatedProfile.dateOfBirth ?? localProfile.dob,
+        gender: updatedProfile.gender ?? localProfile.gender,
+        heightCm: updatedProfile.heightCm ?? localProfile.heightCm,
         age: computedAge,
       };
 
-      setLocalProfile(updated);
-      onUpdateProfile(updated);
-      onUpdateSettings(localSettings);
+      setLocalProfile(finalProfile);
+      setLocalSettings(updatedGoals);
+
+      // Update parent only after BOTH saves succeeded.
+      onUpdateProfile(finalProfile);
+      onUpdateSettings(updatedGoals);
+
       setIsProfileSaved(true);
       setShowSavedToast(true);
-      setTimeout(() => {
+
+      window.setTimeout(() => {
         setIsProfileSaved(false);
         setShowSavedToast(false);
       }, 2500);
-    } catch (err) {
-      console.error('Failed to save profile:', err);
-      const msg = err instanceof Error ? err.message : 'Failed to save profile changes. Please try again.';
-      setProfileError(msg);
-      setTimeout(() => setProfileError(null), 4000);
+    } catch (error) {
+      console.error('Weight Loss Profile save failed:', error);
+
+      setProfileError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save Weight Loss profile.'
+      );
     } finally {
       setIsSavingProfile(false);
     }

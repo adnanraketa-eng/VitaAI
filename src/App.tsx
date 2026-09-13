@@ -99,6 +99,7 @@ export default function App() {
                   goals.dietaryPreferences && goals.dietaryPreferences.length > 0
                     ? goals.dietaryPreferences
                     : prev.dietaryPreferences,
+                healthyHabits: goals.healthyHabits ?? prev.healthyHabits,
               }));
             }
           } catch {
