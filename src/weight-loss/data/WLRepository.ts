@@ -97,7 +97,7 @@ export class WLRepository {
       id: String(data.id),
       weightLb: Number(data.weight_lb),
       recordedAt: data.recorded_at,
-      note,
+      ...(note ? { note } : {}),
     };
   }
 
@@ -411,7 +411,7 @@ export class WLRepository {
     return {
       currentWeightLb: data.current_weight_lb !== null && data.current_weight_lb !== undefined ? Number(data.current_weight_lb) : 0,
       goalWeightLb: data.goal_weight_lb !== null && data.goal_weight_lb !== undefined ? Number(data.goal_weight_lb) : 0,
-      startWeightLb: data.start_weight_lb !== null && data.start_weight_lb !== undefined ? Number(data.start_weight_lb) : (Number(data.current_weight_lb) || 0),
+      startWeightLb: Number(data.current_weight_lb) || 0,
       targetPace: data.target_pace || '1 lb / week',
       dailyStepGoal: data.daily_step_target ? Number(data.daily_step_target) : 8500,
       dailyWaterGoalL: data.daily_water_target_ml ? parseFloat((Number(data.daily_water_target_ml) / 1000).toFixed(2)) : 2.5,
@@ -421,7 +421,7 @@ export class WLRepository {
       dailyFatGoalG: data.daily_fat_target_g ? Number(data.daily_fat_target_g) : 60,
       dailyFiberGoalG: data.daily_fiber_target_g ? Number(data.daily_fiber_target_g) : 28,
       dietaryPreferences: Array.isArray(data.food_preferences) ? data.food_preferences : [],
-      healthyHabits: Array.isArray(data.healthy_habits) ? data.healthy_habits : [
+      healthyHabits: [
         { id: 'h_1', title: 'Drink a glass of water before breakfast', completed: false },
         { id: 'h_2', title: 'Aim for 30g protein at first meal', completed: false },
         { id: 'h_3', title: '15-min post-dinner walk', completed: false },
@@ -454,15 +454,17 @@ export class WLRepository {
       profileUpdates.daily_step_target = Math.round(goal.dailyStepGoal);
     if (goal.dietaryPreferences !== undefined)
       profileUpdates.food_preferences = goal.dietaryPreferences;
-    if (goal.healthyHabits !== undefined)
-      profileUpdates.healthy_habits = goal.healthyHabits;
 
     const { error } = await supabase
       .from('weight_loss_profiles')
       .upsert({ user_id: user.id, ...profileUpdates });
 
     if (error) throw error;
-    return this.getGoals();
+    const goals = await this.getGoals();
+    return {
+      ...goals,
+      healthyHabits: goal.healthyHabits ?? goals.healthyHabits,
+    };
   }
 
   /* ================= COACH MESSAGES ================= */
