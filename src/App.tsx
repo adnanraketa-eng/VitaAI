@@ -78,6 +78,32 @@ export default function App() {
           } catch {
             // Non-critical profile synchronization
           }
+
+          try {
+            const goals = await WLRepository.getGoals();
+            if (goals && isMounted && currentRequestId === latestRequestId) {
+              setWeightLossSettings((prev) => ({
+                ...prev,
+                currentWeightLb: goals.currentWeightLb || prev.currentWeightLb,
+                goalWeightLb: goals.goalWeightLb || prev.goalWeightLb,
+                startWeightLb: goals.startWeightLb || prev.startWeightLb,
+                targetPace: goals.targetPace || prev.targetPace,
+                dailyStepGoal: goals.dailyStepGoal || prev.dailyStepGoal,
+                dailyWaterGoalL: goals.dailyWaterGoalL || prev.dailyWaterGoalL,
+                dailyCalorieGoalKcal: goals.dailyCalorieGoalKcal || prev.dailyCalorieGoalKcal,
+                dailyProteinGoalG: goals.dailyProteinGoalG || prev.dailyProteinGoalG,
+                dailyCarbsGoalG: goals.dailyCarbsGoalG ?? prev.dailyCarbsGoalG,
+                dailyFatGoalG: goals.dailyFatGoalG ?? prev.dailyFatGoalG,
+                dailyFiberGoalG: goals.dailyFiberGoalG ?? prev.dailyFiberGoalG,
+                dietaryPreferences:
+                  goals.dietaryPreferences && goals.dietaryPreferences.length > 0
+                    ? goals.dietaryPreferences
+                    : prev.dietaryPreferences,
+              }));
+            }
+          } catch {
+            // Non-critical weight loss goals synchronization
+          }
         }
       } catch {
         if (isMounted && currentRequestId === latestRequestId) {

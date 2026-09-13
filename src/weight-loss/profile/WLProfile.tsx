@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User, Shield, Sparkles, ChevronRight, Bell, 
   HelpCircle, LogOut, RotateCw, Edit3, Settings, 
-  Scale
+  Scale, Check, Loader2, AlertCircle
 } from 'lucide-react';
 import { UserSharedProfile, WeightLossSettings } from '../../types';
 import { PersonalDetailsModal } from '../../profile/PersonalDetailsModal';
 import { WLSettings } from '../settings/WLSettings';
 import { supabase } from '../../core/supabase';
+import { WLRepository } from '../data/WLRepository';
+import { ProfileRepository } from '../../core/profile';
+import { calculateAge } from '../../profile/ProfileScreen';
 
 interface Props {
   profile: UserSharedProfile;
@@ -26,8 +29,24 @@ export function WLProfile({
   onSwitchGoalRequest,
   onRestartOnboarding,
 }: Props) {
+  const [localProfile, setLocalProfile] = useState<UserSharedProfile>({ ...profile });
+  const [localSettings, setLocalSettings] = useState<WeightLossSettings>({ ...settings });
+  const [isEditingProfile, setIsEditingProfile] = useState(true);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isProfileSaved, setIsProfileSaved] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   const [showPersonalDetails, setShowPersonalDetails] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  useEffect(() => {
+    setLocalProfile({ ...profile });
+  }, [profile]);
+
+  useEffect(() => {
+    setLocalSettings({ ...settings });
+  }, [settings]);
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(' ');
@@ -35,10 +54,72 @@ export function WLProfile({
     return (name[0] || 'V').toUpperCase();
   };
 
-  const firstName = profile.fullName.trim().split(' ')[0] || 'User';
+  const firstName = localProfile.fullName.trim().split(' ')[0] || 'User';
+
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
+    setProfileError(null);
+    try {
+      const computedAge = calculateAge(localProfile.dob) ?? localProfile.age;
+
+      // 1. Update shared profile in public.profiles using existing ProfileRepository
+      await ProfileRepository.updateProfile({
+        fullName: localProfile.fullName,
+        dateOfBirth: localProfile.dob,
+        gender: localProfile.gender,
+        heightCm: Number(localProfile.heightCm),
+      });
+
+      // 2. Persist to existing Weight Loss profile backend (weight_loss_profiles) using existing WLRepository
+      await WLRepository.updateGoals({
+        currentWeightLb: localSettings.currentWeightLb,
+        goalWeightLb: localSettings.goalWeightLb,
+        startWeightLb: localSettings.startWeightLb,
+        targetPace: localSettings.targetPace,
+        dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
+        dailyProteinGoalG: localSettings.dailyProteinGoalG,
+        dailyCarbsGoalG: localSettings.dailyCarbsGoalG,
+        dailyFatGoalG: localSettings.dailyFatGoalG,
+        dailyFiberGoalG: localSettings.dailyFiberGoalG,
+        dailyWaterGoalL: localSettings.dailyWaterGoalL,
+        dailyStepGoal: localSettings.dailyStepGoal,
+        dietaryPreferences: localSettings.dietaryPreferences,
+      });
+
+      const updated: UserSharedProfile = {
+        ...localProfile,
+        age: computedAge,
+      };
+
+      setLocalProfile(updated);
+      onUpdateProfile(updated);
+      onUpdateSettings(localSettings);
+      setIsProfileSaved(true);
+      setShowSavedToast(true);
+      setTimeout(() => {
+        setIsProfileSaved(false);
+        setShowSavedToast(false);
+      }, 2500);
+    } catch (err) {
+      console.error('Failed to save profile:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save profile changes. Please try again.';
+      setProfileError(msg);
+      setTimeout(() => setProfileError(null), 4000);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F6FAF7] text-[#1B2B24] pb-28 font-sans selection:bg-[#1F7A5C] selection:text-white">
+      {/* Saved Toast */}
+      {showSavedToast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-[#1F7A5C] text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in slide-in-from-top-4">
+          <Check className="w-4 h-4 stroke-[3]" />
+          <span>Profile Saved</span>
+        </div>
+      )}
+
       {/* Top App Bar */}
       <header className="px-5 pt-3 pb-2 flex items-center justify-between sticky top-0 bg-[#F6FAF7]/90 backdrop-blur-md z-30">
         <div>
@@ -66,10 +147,10 @@ export function WLProfile({
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-14 h-14 rounded-full bg-[#DCE9E1] text-[#1F7A5C] flex items-center justify-center font-bold text-xl border-2 border-[#1F7A5C]/30">
-                  {getInitials(profile.fullName)}
+                  {getInitials(localProfile.fullName)}
                 </div>
                 <button 
-                  onClick={() => setShowPersonalDetails(true)}
+                  onClick={() => setIsEditingProfile(true)}
                   className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#1F7A5C] text-white rounded-full flex items-center justify-center shadow-xs hover:scale-105 transition-transform"
                   title="Edit Profile"
                 >
@@ -78,8 +159,8 @@ export function WLProfile({
               </div>
 
               <div>
-                <h2 className="text-base font-bold text-[#1B2B24]">{profile.fullName}</h2>
-                <p className="text-xs text-[#8A9A92]">{profile.email}</p>
+                <h2 className="text-base font-bold text-[#1B2B24]">{localProfile.fullName}</h2>
+                <p className="text-xs text-[#8A9A92]">{localProfile.email}</p>
                 <div className="inline-block mt-1 px-2.5 py-0.5 bg-[#EFF6F1] text-[#1F7A5C] text-[10px] font-bold rounded-full">
                   Weight Loss & Deficit Strategy
                 </div>
@@ -90,17 +171,149 @@ export function WLProfile({
           <div className="flex justify-between items-center pt-3 border-t border-[#E7EEE9] text-xs">
             <div>
               <span className="text-[10px] text-[#8A9A92] block uppercase tracking-wider">Member Since</span>
-              <span className="font-semibold text-[#1B2B24]">{profile.memberSince}</span>
+              <span className="font-semibold text-[#1B2B24]">{localProfile.memberSince}</span>
             </div>
             <div>
               <span className="text-[10px] text-[#8A9A92] block uppercase tracking-wider">Height</span>
-              <span className="font-semibold text-[#1B2B24]">{profile.heightCm} cm</span>
+              <span className="font-semibold text-[#1B2B24]">{localProfile.heightCm} cm</span>
             </div>
             <div>
               <span className="text-[10px] text-[#8A9A92] block uppercase tracking-wider">Age / Sex</span>
-              <span className="font-semibold text-[#1B2B24]">{profile.age} · {profile.gender}</span>
+              <span className="font-semibold text-[#1B2B24]">{localProfile.age} · {localProfile.gender}</span>
             </div>
           </div>
+        </div>
+
+        {/* Profile Information & Edit Card */}
+        <div className="bg-white rounded-3xl p-5 border border-[#DCE6E0] shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#EFF6F1] text-[#1F7A5C] flex items-center justify-center">
+                <User className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-[#1B2B24]">Profile Information</h3>
+            </div>
+            <button
+              id="btn-toggle-edit-profile"
+              type="button"
+              onClick={() => setIsEditingProfile(!isEditingProfile)}
+              className="text-xs font-bold text-[#1F7A5C] hover:text-[#15533E] flex items-center gap-1"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>{isEditingProfile ? 'Collapse' : 'Edit'}</span>
+            </button>
+          </div>
+
+          {isEditingProfile && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Full Name</label>
+                <input
+                  id="input-profile-fullname"
+                  type="text"
+                  value={localProfile.fullName}
+                  onChange={(e) => setLocalProfile({ ...localProfile, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                  placeholder="Enter full name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Height (cm)</label>
+                  <input
+                    id="input-profile-height"
+                    type="number"
+                    value={localProfile.heightCm || ''}
+                    onChange={(e) => setLocalProfile({ ...localProfile, heightCm: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                    placeholder="175"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Gender</label>
+                  <select
+                    id="select-profile-gender"
+                    value={localProfile.gender}
+                    onChange={(e) => setLocalProfile({ ...localProfile, gender: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Date of Birth</label>
+                <input
+                  id="input-profile-dob"
+                  type="date"
+                  value={localProfile.dob}
+                  onChange={(e) => setLocalProfile({ ...localProfile, dob: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Current Weight (lb)</label>
+                  <input
+                    id="input-profile-current-weight"
+                    type="number"
+                    step="0.1"
+                    value={localSettings.currentWeightLb || ''}
+                    onChange={(e) => setLocalSettings({ ...localSettings, currentWeightLb: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                    placeholder="180"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Goal Weight (lb)</label>
+                  <input
+                    id="input-profile-goal-weight"
+                    type="number"
+                    step="0.1"
+                    value={localSettings.goalWeightLb || ''}
+                    onChange={(e) => setLocalSettings({ ...localSettings, goalWeightLb: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                    placeholder="160"
+                  />
+                </div>
+              </div>
+
+              {profileError && (
+                <div className="p-2.5 bg-[#FFF1F0] border border-[#D65A5A]/30 rounded-xl text-xs text-[#D65A5A] flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{profileError}</span>
+                </div>
+              )}
+
+              <button
+                id="btn-save-wl-profile"
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={isSavingProfile}
+                className="w-full py-3 px-4 bg-[#1F7A5C] hover:bg-[#15533E] text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs cursor-pointer disabled:opacity-50 mt-2"
+              >
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : isProfileSaved ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>Saved</span>
+                  </>
+                ) : (
+                  <span>Save Profile</span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 1. Personal Details Card */}
@@ -233,10 +446,21 @@ export function WLProfile({
       {/* Sub-Modals */}
       {showPersonalDetails && (
         <PersonalDetailsModal
-          profile={profile}
+          profile={localProfile}
           activeModule="weight_loss"
-          onSaveProfile={(p) => {
+          onSaveProfile={async (p) => {
+            setLocalProfile(p);
             onUpdateProfile(p);
+            try {
+              await ProfileRepository.updateProfile({
+                fullName: p.fullName,
+                dateOfBirth: p.dob,
+                gender: p.gender,
+                heightCm: p.heightCm,
+              });
+            } catch (err) {
+              console.error('Failed to update shared profile:', err);
+            }
             setShowPersonalDetails(false);
           }}
           onClose={() => setShowPersonalDetails(false)}
@@ -245,10 +469,10 @@ export function WLProfile({
 
       {showSettingsModal && (
         <WLSettings
-          settings={settings}
+          settings={localSettings}
           onSaveSettings={(s) => {
+            setLocalSettings(s);
             onUpdateSettings(s);
-            setShowSettingsModal(false);
           }}
           onClose={() => setShowSettingsModal(false)}
         />

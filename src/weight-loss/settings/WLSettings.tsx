@@ -25,7 +25,10 @@ export function WLSettings({
     dailyFatGoalG: settings.dailyFatGoalG ?? 65,
     dailyFiberGoalG: settings.dailyFiberGoalG ?? 30,
   }));
+  const [healthyHabits, setHealthyHabits] = useState<{ id: string; title: string; completed: boolean }[]>([]);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -60,10 +63,25 @@ export function WLSettings({
         if (active && goals) {
           setLocalSettings((prev) => ({
             ...prev,
-            dailyCarbsGoalG: prev.dailyCarbsGoalG ?? goals.dailyCarbsGoalG ?? 200,
-            dailyFatGoalG: prev.dailyFatGoalG ?? goals.dailyFatGoalG ?? 65,
-            dailyFiberGoalG: prev.dailyFiberGoalG ?? goals.dailyFiberGoalG ?? 30,
+            currentWeightLb: goals.currentWeightLb || prev.currentWeightLb,
+            goalWeightLb: goals.goalWeightLb || prev.goalWeightLb,
+            startWeightLb: goals.startWeightLb || prev.startWeightLb,
+            targetPace: goals.targetPace || prev.targetPace,
+            dailyStepGoal: goals.dailyStepGoal || prev.dailyStepGoal,
+            dailyWaterGoalL: goals.dailyWaterGoalL || prev.dailyWaterGoalL,
+            dailyCalorieGoalKcal: goals.dailyCalorieGoalKcal || prev.dailyCalorieGoalKcal,
+            dailyProteinGoalG: goals.dailyProteinGoalG || prev.dailyProteinGoalG,
+            dailyCarbsGoalG: goals.dailyCarbsGoalG ?? prev.dailyCarbsGoalG ?? 200,
+            dailyFatGoalG: goals.dailyFatGoalG ?? prev.dailyFatGoalG ?? 65,
+            dailyFiberGoalG: goals.dailyFiberGoalG ?? prev.dailyFiberGoalG ?? 30,
+            dietaryPreferences:
+              goals.dietaryPreferences && goals.dietaryPreferences.length > 0
+                ? goals.dietaryPreferences
+                : prev.dietaryPreferences,
           }));
+          if (goals.healthyHabits && goals.healthyHabits.length > 0) {
+            setHealthyHabits(goals.healthyHabits);
+          }
         }
       })
       .catch((err) => {
@@ -75,9 +93,14 @@ export function WLSettings({
   }, []);
 
   const handleSave = async () => {
+    setIsSaving(true);
     setErrorMessage(null);
     try {
-      await WLRepository.updateGoals({
+      const updatedGoals = await WLRepository.updateGoals({
+        currentWeightLb: localSettings.currentWeightLb,
+        goalWeightLb: localSettings.goalWeightLb,
+        startWeightLb: localSettings.startWeightLb,
+        targetPace: localSettings.targetPace,
         dailyCalorieGoalKcal: localSettings.dailyCalorieGoalKcal,
         dailyProteinGoalG: localSettings.dailyProteinGoalG,
         dailyCarbsGoalG: localSettings.dailyCarbsGoalG ?? 200,
@@ -85,20 +108,26 @@ export function WLSettings({
         dailyFiberGoalG: localSettings.dailyFiberGoalG ?? 30,
         dailyWaterGoalL: localSettings.dailyWaterGoalL,
         dailyStepGoal: localSettings.dailyStepGoal,
-        currentWeightLb: localSettings.currentWeightLb,
-        goalWeightLb: localSettings.goalWeightLb,
-        targetPace: localSettings.targetPace,
+        dietaryPreferences: localSettings.dietaryPreferences,
+        healthyHabits: healthyHabits.length > 0 ? healthyHabits : undefined,
       });
+      if (updatedGoals?.healthyHabits) {
+        setHealthyHabits(updatedGoals.healthyHabits);
+      }
       onSaveSettings(localSettings);
+      setIsSaved(true);
       setShowSavedToast(true);
       setTimeout(() => {
+        setIsSaved(false);
         setShowSavedToast(false);
-        onClose();
-      }, 600);
+      }, 2500);
     } catch (err) {
-      console.warn('Save settings failed:', err);
-      setErrorMessage('Failed to save settings. Please try again.');
-      setTimeout(() => setErrorMessage(null), 3000);
+      console.error('Save settings failed:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to save settings. Please try again.';
+      setErrorMessage(msg);
+      setTimeout(() => setErrorMessage(null), 4000);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -117,11 +146,25 @@ export function WLSettings({
         <h1 className="text-base font-bold">Weight Loss Personal Settings</h1>
 
         <button 
+          id="btn-save-wl-settings"
+          type="button"
           onClick={handleSave}
-          className="text-sm font-bold text-[#1F7A5C] hover:text-[#15533E] px-2 py-1 transition-colors flex items-center gap-1"
+          disabled={isSaving}
+          className="px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-60 bg-[#1F7A5C] text-white hover:bg-[#15533E]"
         >
-          {showSavedToast && <Check className="w-4 h-4 stroke-[3]" />}
-          <span>{showSavedToast ? 'Saved' : 'Save'}</span>
+          {isSaving ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Saving...</span>
+            </>
+          ) : isSaved ? (
+            <>
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Saved</span>
+            </>
+          ) : (
+            <span>Save</span>
+          )}
         </button>
       </div>
 
@@ -133,8 +176,8 @@ export function WLSettings({
       )}
 
       {errorMessage && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in slide-in-from-top-4">
-          <AlertCircle className="w-4 h-4" />
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-[#FFF1F0] border border-[#D65A5A]/30 text-[#D65A5A] text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-1.5 z-50 animate-in fade-in slide-in-from-top-4">
+          <AlertCircle className="w-4 h-4 text-[#D65A5A]" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -507,6 +550,45 @@ export function WLSettings({
                 );
               })}
             </div>
+          </div>
+        </div>
+
+        {/* Healthy Habits */}
+        <div className="space-y-2">
+          <div>
+            <h3 className="text-sm font-bold text-[#1B2B24]">Healthy Habits</h3>
+            <p className="text-xs text-[#8A9A92]">Daily routine goals that support your strategy.</p>
+          </div>
+
+          <div className="bg-white rounded-3xl p-4 border border-[#DCE6E0] shadow-2xs space-y-2">
+            {healthyHabits.length === 0 ? (
+              <p className="text-xs text-[#8A9A92]">No healthy habits configured.</p>
+            ) : (
+              <div className="space-y-2">
+                {healthyHabits.map((habit) => (
+                  <div
+                    key={habit.id}
+                    onClick={() => {
+                      setHealthyHabits((prev) =>
+                        prev.map((h) => (h.id === habit.id ? { ...h, completed: !h.completed } : h))
+                      );
+                    }}
+                    className="p-3 bg-[#F6FAF7] border border-[#DCE6E0] rounded-2xl flex items-center justify-between cursor-pointer hover:bg-[#EFF6F1] transition-colors"
+                  >
+                    <span className="text-xs font-semibold text-[#1B2B24]">{habit.title}</span>
+                    <div
+                      className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+                        habit.completed
+                          ? 'bg-[#1F7A5C] border-[#1F7A5C] text-white'
+                          : 'bg-white border-[#DCE6E0]'
+                      }`}
+                    >
+                      {habit.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
