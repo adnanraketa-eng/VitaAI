@@ -17,6 +17,21 @@ export function getLocalDateString(dateInput?: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Normalizes input source to the exact uppercase values permitted by public.meal_log_entries
+ * CHECK (input_source IN ('SCAN', 'GALLERY', 'SEARCH', 'MANUAL'))
+ */
+export function mapInputSourceToDb(source?: string | null): 'SCAN' | 'GALLERY' | 'SEARCH' | 'MANUAL' {
+  if (!source) return 'MANUAL';
+  const normalized = source.trim().toUpperCase();
+  if (normalized === 'SCAN') return 'SCAN';
+  if (normalized === 'GALLERY') return 'GALLERY';
+  if (normalized === 'SEARCH') return 'SEARCH';
+  if (normalized === 'MANUAL') return 'MANUAL';
+  if (normalized === 'QUICK') return 'MANUAL';
+  return 'MANUAL';
+}
+
 async function requireAuthUser() {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
@@ -248,12 +263,15 @@ export class WLRepository {
       throw new Error('Food name is required.');
     }
 
+    const rawSource = entry.inputSource || (entry.photoUrl ? 'SCAN' : 'MANUAL');
+    const inputSourceDb = mapInputSourceToDb(rawSource);
+
     const payload = {
       user_id: user.id,
       food_name: entry.name.trim(),
       meal_type: entry.type,
       serving: entry.serving ?? null,
-      input_source: entry.inputSource || (entry.photoUrl ? 'scan' : 'manual'),
+      input_source: inputSourceDb,
       calories: Math.max(0, Math.round(Number(entry.calories) || 0)),
       protein_g: Math.max(0, Math.round(Number(entry.proteinG) || 0)),
       carbs_g: Math.max(0, Math.round(Number(entry.carbsG) || 0)),

@@ -51,6 +51,9 @@ export function WLFood({
   
   // Attached Photo & Live Camera state
   const [capturedImage, setCapturedImage] = useState<string | null>(initialImage);
+  const [photoSource, setPhotoSource] = useState<'SCAN' | 'GALLERY' | null>(
+    initialMode === 'gallery' ? 'GALLERY' : (initialMode === 'scan' || initialImage ? 'SCAN' : null)
+  );
   const [isLiveCameraOpen, setIsLiveCameraOpen] = useState<boolean>(initialMode === 'scan');
   const [cameraError, setCameraError] = useState<string | null>(null);
 
@@ -238,6 +241,7 @@ export function WLFood({
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
           setCapturedImage(dataUrl);
+          setPhotoSource('SCAN');
           stopCameraStream();
           setIsLiveCameraOpen(false);
           analyzeFoodWithAI(dataUrl);
@@ -278,7 +282,7 @@ export function WLFood({
     setShowSearchList(false);
   };
 
-  const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>, source: 'SCAN' | 'GALLERY' = 'SCAN') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -286,6 +290,7 @@ export function WLFood({
     reader.onload = () => {
       const result = reader.result as string;
       setCapturedImage(result);
+      setPhotoSource(source);
       analyzeFoodWithAI(result);
     };
     reader.readAsDataURL(file);
@@ -313,7 +318,13 @@ export function WLFood({
     setError(null);
 
     try {
-      const inputSource = capturedImage || analysisResult ? 'scan' : 'manual';
+      let inputSource: 'SCAN' | 'GALLERY' | 'SEARCH' | 'MANUAL' = 'MANUAL';
+      if (capturedImage || analysisResult) {
+        inputSource = photoSource === 'GALLERY' ? 'GALLERY' : 'SCAN';
+      } else if (initialMode === 'search') {
+        inputSource = 'SEARCH';
+      }
+
       const newMeal = await WLRepository.addMealEntry({
         type: mealType,
         name: trimmedName,
@@ -341,17 +352,29 @@ export function WLFood({
       onMealAdded?.();
       onClose();
     } catch (err: any) {
-      console.error('Failed to save meal entry to Supabase:', err);
+      console.error('Failed to save meal entry to Supabase:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        full: err,
+      });
 
-      let msg = 'Failed to save meal. Please try again.';
+      const parts: string[] = [];
       if (typeof err?.message === 'string' && err.message.trim()) {
-        msg = err.message.trim();
-      } else if (typeof err?.details === 'string' && err.details.trim()) {
-        msg = err.details.trim();
-      } else if (typeof err?.hint === 'string' && err.hint.trim()) {
-        msg = err.hint.trim();
+        parts.push(err.message.trim());
+      }
+      if (typeof err?.details === 'string' && err.details.trim()) {
+        parts.push(err.details.trim());
+      }
+      if (typeof err?.hint === 'string' && err.hint.trim()) {
+        parts.push(`Hint: ${err.hint.trim()}`);
+      }
+      if (typeof err?.code === 'string' && err.code.trim()) {
+        parts.push(`Code: ${err.code.trim()}`);
       }
 
+      const msg = parts.length > 0 ? parts.join(' — ') : 'Failed to save meal. Please try again.';
       setError(msg);
     } finally {
       setIsSaving(false);
@@ -378,14 +401,14 @@ export function WLFood({
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={handleImageCapture}
+          onChange={(e) => handleImageCapture(e, 'SCAN')}
           className="hidden"
         />
         <input
           ref={galleryInputRef}
           type="file"
           accept="image/*"
-          onChange={handleImageCapture}
+          onChange={(e) => handleImageCapture(e, 'GALLERY')}
           className="hidden"
         />
 
@@ -485,14 +508,14 @@ export function WLFood({
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={handleImageCapture}
+        onChange={(e) => handleImageCapture(e, 'SCAN')}
         className="hidden"
       />
       <input
         ref={galleryInputRef}
         type="file"
         accept="image/*"
-        onChange={handleImageCapture}
+        onChange={(e) => handleImageCapture(e, 'GALLERY')}
         className="hidden"
       />
 
@@ -565,6 +588,7 @@ export function WLFood({
                 type="button"
                 onClick={() => {
                   setCapturedImage(null);
+                  setPhotoSource(null);
                   setAnalysisResult(null);
                   setAnalysisError(null);
                 }}
