@@ -28,6 +28,7 @@ function mapMealRow(row: any): WLMealEntry {
     fatG: Number(row.fat_g || 0),
     fiberG: row.fiber_g !== null && row.fiber_g !== undefined ? Number(row.fiber_g) : undefined,
     serving: row.serving || undefined,
+    inputSource: row.input_source || undefined,
     loggedAt: row.recorded_at || row.created_at || new Date().toISOString(),
     nutritionScore:
       row.nutrition_score !== null && row.nutrition_score !== undefined
@@ -229,28 +230,43 @@ export class WLRepository {
     entry: Omit<WLMealEntry, 'id' | 'loggedAt'> & { loggedAt?: string }
   ): Promise<WLMealEntry> {
     const user = await requireAuthUser();
-    const loggedAt = entry.loggedAt || new Date().toISOString();
+    const nowIso = new Date().toISOString();
+    const loggedAt = entry.loggedAt || nowIso;
+
+    // Validate food_name
+    if (!entry.name || !entry.name.trim()) {
+      throw new Error('Food name is required.');
+    }
+
+    const payload = {
+      user_id: user.id,
+      food_name: entry.name.trim(),
+      meal_type: entry.type,
+      serving: entry.serving ?? null,
+      input_source: entry.inputSource || (entry.photoUrl ? 'scan' : 'manual'),
+      calories: Math.max(0, Math.round(Number(entry.calories) || 0)),
+      protein_g: Math.max(0, Math.round(Number(entry.proteinG) || 0)),
+      carbs_g: Math.max(0, Math.round(Number(entry.carbsG) || 0)),
+      fat_g: Math.max(0, Math.round(Number(entry.fatG) || 0)),
+      fiber_g: entry.fiberG !== undefined && entry.fiberG !== null && !isNaN(Number(entry.fiberG))
+        ? Math.max(0, Math.round(Number(entry.fiberG)))
+        : null,
+      nutrition_score: entry.nutritionScore !== undefined && entry.nutritionScore !== null && !isNaN(Number(entry.nutritionScore))
+        ? Math.round(Number(entry.nutritionScore))
+        : null,
+      score_label: entry.nutritionScoreLabel ?? null,
+      health_classification: entry.aiChoiceStatus ?? null,
+      ai_insight: entry.aiInsight ?? null,
+      ai_note: entry.aiNote || null,
+      ai_suggestions: Array.isArray(entry.recommendations) ? entry.recommendations : [],
+      recorded_at: loggedAt,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
     const { data, error } = await supabase
       .from('meal_log_entries')
-      .insert({
-        user_id: user.id,
-        food_name: entry.name,
-        meal_type: entry.type,
-        serving: entry.serving ?? null,
-        input_source: 'manual',
-        calories: Math.round(entry.calories || 0),
-        protein_g: Math.round(entry.proteinG || 0),
-        carbs_g: Math.round(entry.carbsG || 0),
-        fat_g: Math.round(entry.fatG || 0),
-        fiber_g: entry.fiberG !== undefined && entry.fiberG !== null ? Math.round(entry.fiberG) : null,
-        nutrition_score: entry.nutritionScore ?? null,
-        score_label: entry.nutritionScoreLabel ?? null,
-        health_classification: entry.aiChoiceStatus ?? null,
-        ai_insight: entry.aiInsight ?? null,
-        ai_note: entry.aiNote || entry.notes || null,
-        ai_suggestions: entry.recommendations ?? null,
-        recorded_at: loggedAt,
-      })
+      .insert(payload)
       .select('*')
       .single();
 

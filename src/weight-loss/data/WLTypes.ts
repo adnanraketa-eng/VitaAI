@@ -15,6 +15,7 @@ export interface WLMealEntry {
   fatG: number;
   fiberG?: number;
   serving?: string;
+  inputSource?: 'scan' | 'manual' | 'search' | 'quick';
   loggedAt: string; // ISO date-time string
   notes?: string;
   photoUrl?: string;
