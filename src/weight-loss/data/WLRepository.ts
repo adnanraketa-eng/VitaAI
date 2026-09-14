@@ -517,38 +517,13 @@ export class WLRepository {
       profileUpdates.food_preferences = goal.dietaryPreferences;
 
     const payload = { user_id: user.id, ...profileUpdates };
-    const operation = 'supabase.from("weight_loss_profiles").upsert(payload)';
-    const payloadKeys = Object.keys(payload);
 
-    console.log('[WLRepository.updateGoals] Initiating save:', {
-      'authenticated user.id': user.id,
-      'operation being performed': operation,
-      'exact payload keys': payloadKeys,
-    });
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('weight_loss_profiles')
-      .upsert(payload);
+      .upsert(payload, { onConflict: 'user_id' });
 
-    if (error) {
-      console.error('[WLRepository.updateGoals] Save failed:', {
-        'authenticated user.id': user.id,
-        'operation being performed': operation,
-        'exact payload keys': payloadKeys,
-        'Supabase error code': error.code,
-        'Supabase error message': error.message,
-        'Supabase error details': error.details,
-        'Supabase error hint': error.hint,
-      });
-      throw error;
-    }
+    if (error) throw error;
 
-    console.log('[WLRepository.updateGoals] Save succeeded:', {
-      'authenticated user.id': user.id,
-      'operation being performed': operation,
-      'exact payload keys': payloadKeys,
-      data,
-    });
     const goals = await this.getGoals();
     return {
       ...goals,

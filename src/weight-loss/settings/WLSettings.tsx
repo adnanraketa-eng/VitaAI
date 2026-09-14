@@ -125,14 +125,19 @@ export function WLSettings({
         setIsSaved(false);
         setShowSavedToast(false);
       }, 2500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Weight Loss Settings save failed:', error);
 
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Failed to save Weight Loss settings.'
-      );
+      let msg = 'Failed to save Weight Loss settings.';
+      if (typeof error?.message === 'string' && error.message.trim()) {
+        msg = error.message.trim();
+      } else if (typeof error?.details === 'string' && error.details.trim()) {
+        msg = error.details.trim();
+      } else if (typeof error?.hint === 'string' && error.hint.trim()) {
+        msg = error.hint.trim();
+      }
+
+      setErrorMessage(msg);
     } finally {
       setIsSaving(false);
     }
