@@ -60,6 +60,67 @@ function mapActivityRow(row: any): WLActivityRecord {
 
 let coachMessagesStore: WLCoachMessage[] = [];
 
+export type WLTargetPaceDb = 'Slow' | 'Steady' | 'Moderate';
+
+/**
+ * Maps any UI target pace string (e.g. '0.5 lb / week', '1 lb / week', '1.5 lb / week', '2 lb / week',
+ * 'gentle', 'moderate', etc.) to the strict database check constraint:
+ * CHECK ((target_pace IS NULL) OR (target_pace = ANY (ARRAY['Slow'::text, 'Steady'::text, 'Moderate'::text])))
+ */
+export function mapPaceToDb(pace?: string | null): WLTargetPaceDb | null {
+  if (pace === undefined || pace === null) return null;
+  const p = pace.trim().toLowerCase();
+  if (!p) return null;
+
+  // 1. Direct exact matches for DB constraint values
+  if (p === 'slow') return 'Slow';
+  if (p === 'steady') return 'Steady';
+  if (p === 'moderate') return 'Moderate';
+
+  // 2. Map existing UI values
+  // Gentle / 0.5 lb / week -> Slow
+  if (p.includes('0.5') || p.includes('slow') || p.includes('gentle')) {
+    return 'Slow';
+  }
+  // Standard / Steady / Recommended / 1.0 lb / week -> Steady
+  if (
+    p.includes('1.0') ||
+    p.includes('1 lb') ||
+    p.includes('steady') ||
+    p.includes('standard') ||
+    p.includes('sustain')
+  ) {
+    return 'Steady';
+  }
+  // Accelerated / Intensive / Active / Fast / 1.5 lb / 2.0 lb / week -> Moderate
+  if (
+    p.includes('1.5') ||
+    p.includes('2') ||
+    p.includes('accelerat') ||
+    p.includes('intens') ||
+    p.includes('activ') ||
+    p.includes('fast') ||
+    p.includes('max') ||
+    p.includes('deficit')
+  ) {
+    return 'Moderate';
+  }
+
+  // Safe fallback to allowed constraint value
+  return 'Steady';
+}
+
+/**
+ * Converts DB values ('Slow', 'Steady', 'Moderate') to user-friendly UI pace strings.
+ */
+export function mapPaceFromDb(pace?: string | null): string {
+  if (!pace) return '1 lb / week';
+  if (pace === 'Slow') return '0.5 lb / week';
+  if (pace === 'Steady') return '1 lb / week';
+  if (pace === 'Moderate') return '1.5 lb / week';
+  return pace;
+}
+
 export class WLRepository {
   /* ================= WEIGHT RECORDS ================= */
 
@@ -412,7 +473,7 @@ export class WLRepository {
       currentWeightLb: data.current_weight_lb !== null && data.current_weight_lb !== undefined ? Number(data.current_weight_lb) : 0,
       goalWeightLb: data.goal_weight_lb !== null && data.goal_weight_lb !== undefined ? Number(data.goal_weight_lb) : 0,
       startWeightLb: Number(data.current_weight_lb) || 0,
-      targetPace: data.target_pace || '1 lb / week',
+      targetPace: mapPaceFromDb(data.target_pace),
       dailyStepGoal: data.daily_step_target ? Number(data.daily_step_target) : 8500,
       dailyWaterGoalL: data.daily_water_target_ml ? parseFloat((Number(data.daily_water_target_ml) / 1000).toFixed(2)) : 2.5,
       dailyCalorieGoalKcal: data.daily_calorie_target ? Number(data.daily_calorie_target) : 1800,
@@ -437,7 +498,7 @@ export class WLRepository {
     };
     if (goal.currentWeightLb !== undefined) profileUpdates.current_weight_lb = goal.currentWeightLb;
     if (goal.goalWeightLb !== undefined) profileUpdates.goal_weight_lb = goal.goalWeightLb;
-    if (goal.targetPace !== undefined) profileUpdates.target_pace = goal.targetPace;
+    if (goal.targetPace !== undefined) profileUpdates.target_pace = mapPaceToDb(goal.targetPace);
     if (goal.dailyCalorieGoalKcal !== undefined)
       profileUpdates.daily_calorie_target = Math.round(goal.dailyCalorieGoalKcal);
     if (goal.dailyProteinGoalG !== undefined)
@@ -455,11 +516,39 @@ export class WLRepository {
     if (goal.dietaryPreferences !== undefined)
       profileUpdates.food_preferences = goal.dietaryPreferences;
 
-    const { error } = await supabase
-      .from('weight_loss_profiles')
-      .upsert({ user_id: user.id, ...profileUpdates });
+    const payload = { user_id: user.id, ...profileUpdates };
+    const operation = 'supabase.from("weight_loss_profiles").upsert(payload)';
+    const payloadKeys = Object.keys(payload);
 
-    if (error) throw error;
+    console.log('[WLRepository.updateGoals] Initiating save:', {
+      'authenticated user.id': user.id,
+      'operation being performed': operation,
+      'exact payload keys': payloadKeys,
+    });
+
+    const { data, error } = await supabase
+      .from('weight_loss_profiles')
+      .upsert(payload);
+
+    if (error) {
+      console.error('[WLRepository.updateGoals] Save failed:', {
+        'authenticated user.id': user.id,
+        'operation being performed': operation,
+        'exact payload keys': payloadKeys,
+        'Supabase error code': error.code,
+        'Supabase error message': error.message,
+        'Supabase error details': error.details,
+        'Supabase error hint': error.hint,
+      });
+      throw error;
+    }
+
+    console.log('[WLRepository.updateGoals] Save succeeded:', {
+      'authenticated user.id': user.id,
+      'operation being performed': operation,
+      'exact payload keys': payloadKeys,
+      data,
+    });
     const goals = await this.getGoals();
     return {
       ...goals,

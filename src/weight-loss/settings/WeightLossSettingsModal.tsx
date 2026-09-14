@@ -179,7 +179,12 @@ export function WeightLossSettingsModal({
                   <span className="text-xs text-[#8A9A92] font-medium block">Target pace</span>
                   {editingField === 'targetPace' ? (
                     <select
-                      value={localSettings.targetPace}
+                      value={
+                        localSettings.targetPace === 'Slow' ? '0.5 lb / week' :
+                        localSettings.targetPace === 'Steady' ? '1.0 lb / week' :
+                        localSettings.targetPace === 'Moderate' ? '1.5 lb / week' :
+                        localSettings.targetPace
+                      }
                       onChange={(e) => setLocalSettings({ ...localSettings, targetPace: e.target.value })}
                       className="text-xs font-bold text-[#1B2B24] border-b border-[#1F7A5C] focus:outline-none bg-transparent"
                     >

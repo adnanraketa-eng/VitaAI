@@ -94,7 +94,12 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       return { estCompletionStr: 'Achieved!', targetMonthStr: 'Goal achieved' };
     }
     const toGo = currentWeight - goalWeight;
-    const pace = settings.targetPace === 'gentle' ? 0.5 : settings.targetPace === 'fast' ? 2.0 : 1.0;
+    const pace =
+      settings.targetPace === 'gentle' || settings.targetPace === 'Slow' || settings.targetPace?.includes('0.5')
+        ? 0.5
+        : settings.targetPace === 'fast' || settings.targetPace === 'Moderate' || settings.targetPace?.includes('1.5') || settings.targetPace?.includes('2')
+        ? 1.5
+        : 1.0;
     const weeksRemaining = Math.max(1, Math.ceil(toGo / pace));
     const est = new Date();
     est.setDate(est.getDate() + weeksRemaining * 7);

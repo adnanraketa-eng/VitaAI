@@ -1,6 +1,7 @@
 import { OnboardingData } from './OnboardingTypes';
 import { supabase } from '../core/supabase';
 import { ProfileRepository, formatSupabaseError } from '../core/profile';
+import { mapPaceToDb } from '../weight-loss/data/WLRepository';
 
 const ONBOARDING_DRAFT_KEY = 'vita_onboarding_draft';
 
@@ -110,7 +111,7 @@ export const OnboardingRepository = {
           ? Number(data.goalWeightLb)
           : null,
       activity_level: data.activityLevel ?? null,
-      target_pace: data.targetPace ?? null,
+      target_pace: mapPaceToDb(data.targetPace),
       daily_calorie_target:
         data.dailyCalorieGoalKcal !== undefined && data.dailyCalorieGoalKcal !== null
           ? Math.round(Number(data.dailyCalorieGoalKcal))

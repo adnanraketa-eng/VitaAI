@@ -282,7 +282,12 @@ export function WLSettings({
                 </div>
               </div>
               <select
-                value={localSettings.targetPace}
+                value={
+                  localSettings.targetPace === 'Slow' ? '0.5 lb / week' :
+                  localSettings.targetPace === 'Steady' ? '1 lb / week' :
+                  localSettings.targetPace === 'Moderate' ? '1.5 lb / week' :
+                  localSettings.targetPace
+                }
                 onChange={(e) => setLocalSettings({ ...localSettings, targetPace: e.target.value })}
                 className="bg-[#EFF6F1] text-[#1F7A5C] text-xs font-bold px-3 py-1.5 rounded-full border border-[#DCE6E0] focus:outline-none"
               >
