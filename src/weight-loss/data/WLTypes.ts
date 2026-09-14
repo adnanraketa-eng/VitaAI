@@ -41,6 +41,8 @@ export interface WLActivityRecord {
   id: string;
   steps: number;
   exerciseMin: number;
+  exerciseSessions?: number;
+  activityDate?: string;
   caloriesBurned: number;
   activityType: string;
   source: 'Health Connect' | 'Manual' | 'Device';

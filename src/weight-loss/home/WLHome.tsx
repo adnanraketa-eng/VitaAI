@@ -65,18 +65,19 @@ export function WLHome({
 
   const refreshData = async () => {
     try {
-      const [weight, meals, water, activity, summary] = await Promise.all([
+      const [weightRes, mealsRes, waterRes, activityRes, summaryRes] = await Promise.allSettled([
         WLRepository.getLatestWeight(),
         WLRepository.getTodayMeals(),
         WLRepository.getTodayWaterL(),
         WLRepository.getTodayActivity(),
         WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal),
       ]);
-      setLatestWeightRecord(weight);
-      setTodayMeals(meals);
-      setTodayWater(water);
-      setTodayActivity(activity);
-      setNutritionSummary(summary);
+
+      if (weightRes.status === 'fulfilled') setLatestWeightRecord(weightRes.value);
+      if (mealsRes.status === 'fulfilled') setTodayMeals(mealsRes.value);
+      if (waterRes.status === 'fulfilled') setTodayWater(waterRes.value);
+      if (activityRes.status === 'fulfilled') setTodayActivity(activityRes.value);
+      if (summaryRes.status === 'fulfilled') setNutritionSummary(summaryRes.value);
     } catch (err) {
       console.warn('WLHome refreshData error:', err);
     }
@@ -100,7 +101,8 @@ export function WLHome({
   const calPercent = Math.min(100, Math.round((nutritionSummary.calories / settings.dailyCalorieGoalKcal) * 100));
   const proteinPercent = Math.min(100, Math.round((nutritionSummary.proteinG / settings.dailyProteinGoalG) * 100));
   const waterPercent = Math.min(100, Math.round((todayWater / settings.dailyWaterGoalL) * 100));
-  const stepPercent = Math.min(100, Math.round((todayActivity.steps / settings.dailyStepGoal) * 100));
+  const stepGoal = Math.max(1, settings.dailyStepGoal || 8500);
+  const stepPercent = Math.max(0, Math.min(100, Math.round((Math.max(0, todayActivity.steps) / stepGoal) * 100)));
 
   // Meals by category
   const breakfastMeals = todayMeals.filter((m) => m.type === 'breakfast');

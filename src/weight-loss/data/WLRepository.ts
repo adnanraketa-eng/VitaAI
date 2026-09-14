@@ -9,6 +9,14 @@ import {
 } from './WLTypes';
 import { supabase } from '../../core/supabase';
 
+export function getLocalDateString(dateInput?: Date | string): string {
+  const d = dateInput ? (typeof dateInput === 'string' ? new Date(dateInput) : dateInput) : new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 async function requireAuthUser() {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
@@ -50,9 +58,11 @@ function mapActivityRow(row: any): WLActivityRecord {
 
   return {
     id: String(row.id),
-    steps: Number(row.steps || 0),
-    exerciseMin: Number(row.exercise_minutes || 0),
-    caloriesBurned: Math.round((Number(row.steps || 0) * 0.04) + (Number(row.exercise_minutes || 0) * 6)),
+    steps: Math.max(0, Math.round(Number(row.steps) || 0)),
+    exerciseMin: Math.max(0, Math.round(Number(row.exercise_minutes) || 0)),
+    exerciseSessions: Math.max(0, Math.round(Number(row.exercise_sessions) || 0)),
+    activityDate: row.activity_date || undefined,
+    caloriesBurned: Math.round((Math.max(0, Number(row.steps) || 0) * 0.04) + (Math.max(0, Number(row.exercise_minutes) || 0) * 6)),
     activityType: 'Daily Activity',
     source: 'Manual',
     loggedAt: dateStr,
@@ -404,7 +414,7 @@ export class WLRepository {
     const user = await requireAuthUser();
     const { data, error } = await supabase
       .from('activity_daily_records')
-      .select('*')
+      .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions, created_at, updated_at')
       .eq('user_id', user.id)
       .order('activity_date', { ascending: false });
 
@@ -412,20 +422,107 @@ export class WLRepository {
     return (data || []).map(mapActivityRow);
   }
 
-  static async getTodayActivity(): Promise<{ steps: number; exerciseMin: number; caloriesBurned: number }> {
-    const today = new Date().toISOString().split('T')[0];
+  static async getTodayActivity(): Promise<{
+    steps: number;
+    exerciseMin: number;
+    exerciseSessions: number;
+    caloriesBurned: number;
+    activityRecordId?: string;
+  }> {
+    const today = getLocalDateString();
     const user = await requireAuthUser();
     const { data, error } = await supabase
       .from('activity_daily_records')
-      .select('steps, exercise_minutes')
+      .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions')
       .eq('user_id', user.id)
       .eq('activity_date', today);
 
     if (error) throw error;
-    const steps = (data || []).reduce((acc, r) => acc + (Number(r.steps) || 0), 0);
-    const exerciseMin = (data || []).reduce((acc, r) => acc + (Number(r.exercise_minutes) || 0), 0);
+
+    if (!data || data.length === 0) {
+      return {
+        steps: 0,
+        exerciseMin: 0,
+        exerciseSessions: 0,
+        caloriesBurned: 0,
+      };
+    }
+
+    const firstRow = data[0];
+    const steps = (data || []).reduce((acc, r) => acc + Math.max(0, Math.round(Number(r.steps) || 0)), 0);
+    const exerciseMin = (data || []).reduce((acc, r) => acc + Math.max(0, Math.round(Number(r.exercise_minutes) || 0)), 0);
+    const exerciseSessions = (data || []).reduce((acc, r) => acc + Math.max(0, Math.round(Number(r.exercise_sessions) || 0)), 0);
     const caloriesBurned = Math.round(steps * 0.04 + exerciseMin * 6);
-    return { steps, exerciseMin, caloriesBurned };
+
+    return {
+      steps,
+      exerciseMin,
+      exerciseSessions,
+      caloriesBurned,
+      activityRecordId: firstRow?.id ? String(firstRow.id) : undefined,
+    };
+  }
+
+  static async saveTodayActivity(payload: {
+    steps: number;
+    exerciseMin?: number;
+    exerciseSessions?: number;
+    activityDate?: string;
+  }): Promise<WLActivityRecord> {
+    const user = await requireAuthUser();
+    const dateToSave = payload.activityDate || getLocalDateString();
+    const cleanSteps = Math.max(0, Math.round(Number(payload.steps) || 0));
+    const cleanMinutes = Math.max(0, Math.round(Number(payload.exerciseMin) || 0));
+    const cleanSessions = Math.max(0, Math.round(Number(payload.exerciseSessions) || 0));
+    const nowIso = new Date().toISOString();
+
+    // Safe frontend check: Check if a record already exists for today
+    const { data: existingRows, error: findError } = await supabase
+      .from('activity_daily_records')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('activity_date', dateToSave)
+      .limit(1);
+
+    if (findError) throw findError;
+
+    if (existingRows && existingRows.length > 0) {
+      // Update existing row
+      const existingId = existingRows[0].id;
+      const { data: updatedData, error: updateError } = await supabase
+        .from('activity_daily_records')
+        .update({
+          steps: cleanSteps,
+          exercise_minutes: cleanMinutes,
+          exercise_sessions: cleanSessions,
+          updated_at: nowIso,
+        })
+        .eq('id', existingId)
+        .eq('user_id', user.id)
+        .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions, created_at, updated_at')
+        .single();
+
+      if (updateError) throw updateError;
+      return mapActivityRow(updatedData);
+    } else {
+      // Insert new row
+      const { data: insertedData, error: insertError } = await supabase
+        .from('activity_daily_records')
+        .insert({
+          user_id: user.id,
+          activity_date: dateToSave,
+          steps: cleanSteps,
+          exercise_minutes: cleanMinutes,
+          exercise_sessions: cleanSessions,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions, created_at, updated_at')
+        .single();
+
+      if (insertError) throw insertError;
+      return mapActivityRow(insertedData);
+    }
   }
 
   static async addActivityRecord(
@@ -433,21 +530,61 @@ export class WLRepository {
   ): Promise<WLActivityRecord> {
     const user = await requireAuthUser();
     const loggedAt = activity.loggedAt || new Date().toISOString();
-    const activityDate = loggedAt.split('T')[0];
+    const activityDate = getLocalDateString(loggedAt);
+    const cleanSteps = Math.max(0, Math.round(Number(activity.steps) || 0));
+    const cleanMinutes = Math.max(0, Math.round(Number(activity.exerciseMin) || 0));
+    const cleanSessions = Math.max(0, Math.round(Number(activity.exerciseSessions) || 0));
+    const nowIso = new Date().toISOString();
 
-    const { data, error } = await supabase
+    // Check if a row already exists for this date to safely add or update
+    const { data: existingRows, error: findError } = await supabase
       .from('activity_daily_records')
-      .insert({
-        user_id: user.id,
-        activity_date: activityDate,
-        steps: activity.steps || 0,
-        exercise_minutes: activity.exerciseMin || 0,
-      })
-      .select('*')
-      .single();
+      .select('id, steps, exercise_minutes, exercise_sessions')
+      .eq('user_id', user.id)
+      .eq('activity_date', activityDate)
+      .limit(1);
 
-    if (error) throw error;
-    return mapActivityRow(data);
+    if (findError) throw findError;
+
+    if (existingRows && existingRows.length > 0) {
+      const existing = existingRows[0];
+      const newSteps = (Number(existing.steps) || 0) + cleanSteps;
+      const newMinutes = (Number(existing.exercise_minutes) || 0) + cleanMinutes;
+      const newSessions = (Number(existing.exercise_sessions) || 0) + (cleanSessions || (cleanMinutes > 0 || cleanSteps > 0 ? 1 : 0));
+
+      const { data: updatedData, error: updateError } = await supabase
+        .from('activity_daily_records')
+        .update({
+          steps: Math.max(0, Math.round(newSteps)),
+          exercise_minutes: Math.max(0, Math.round(newMinutes)),
+          exercise_sessions: Math.max(0, Math.round(newSessions)),
+          updated_at: nowIso,
+        })
+        .eq('id', existing.id)
+        .eq('user_id', user.id)
+        .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions, created_at, updated_at')
+        .single();
+
+      if (updateError) throw updateError;
+      return mapActivityRow(updatedData);
+    } else {
+      const { data: insertedData, error: insertError } = await supabase
+        .from('activity_daily_records')
+        .insert({
+          user_id: user.id,
+          activity_date: activityDate,
+          steps: cleanSteps,
+          exercise_minutes: cleanMinutes,
+          exercise_sessions: cleanSessions || (cleanMinutes > 0 || cleanSteps > 0 ? 1 : 0),
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions, created_at, updated_at')
+        .single();
+
+      if (insertError) throw insertError;
+      return mapActivityRow(insertedData);
+    }
   }
 
   /* ================= GOALS & HABITS ================= */

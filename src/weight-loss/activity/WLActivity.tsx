@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Footprints, Dumbbell, Flame, Plus, 
-  Activity, Check, Smartphone, AlertCircle 
+  Activity, Check, Smartphone, AlertCircle, Loader2
 } from 'lucide-react';
 import { WLRepository } from '../data/WLRepository';
 import { WLActivityRecord } from '../data/WLTypes';
@@ -13,14 +13,21 @@ interface Props {
 }
 
 export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props) {
-  const [todaySummary, setTodaySummary] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>({
+  const [todaySummary, setTodaySummary] = useState<{
+    steps: number;
+    exerciseMin: number;
+    exerciseSessions: number;
+    caloriesBurned: number;
+  }>({
     steps: 0,
     exerciseMin: 0,
+    exerciseSessions: 0,
     caloriesBurned: 0,
   });
   const [records, setRecords] = useState<WLActivityRecord[]>([]);
   const [showLogModal, setShowLogModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [selectedType, setSelectedType] = useState('Brisk Walking');
   const [stepsInput, setStepsInput] = useState('');
@@ -45,7 +52,8 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
     loadData();
   }, []);
 
-  const stepPercent = Math.min(100, Math.round((todaySummary.steps / dailyStepGoal) * 100));
+  const safeStepGoal = Math.max(1, dailyStepGoal || 8500);
+  const stepPercent = Math.max(0, Math.min(100, Math.round((Math.max(0, todaySummary.steps) / safeStepGoal) * 100)));
 
   const handleSyncHealthConnect = () => {
     setHealthConnectStatus('syncing');
@@ -56,6 +64,7 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
         await WLRepository.addActivityRecord({
           steps: syncSteps,
           exerciseMin: 25,
+          exerciseSessions: 1,
           caloriesBurned: 140,
           activityType: 'Health Connect Auto-Sync',
           source: 'Health Connect',
@@ -68,7 +77,7 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
         setTodaySummary(updatedSum);
         setRecords(updatedRecs);
         onActivityUpdated?.();
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Health Connect sync failed:', err);
         setHealthConnectStatus('idle');
       } finally {
@@ -79,14 +88,25 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
 
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    const steps = parseInt(stepsInput) || 0;
-    const min = parseInt(minutesInput) || 0;
-    const cal = parseInt(caloriesInput) || 0;
+    if (isSaving) return;
+
+    const steps = Math.max(0, Math.round(parseInt(stepsInput) || 0));
+    const min = Math.max(0, Math.round(parseInt(minutesInput) || 0));
+    const cal = Math.max(0, Math.round(parseInt(caloriesInput) || 0));
+
+    if (steps === 0 && min === 0) {
+      setError('Please enter steps or workout duration.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
 
     try {
       await WLRepository.addActivityRecord({
         steps,
         exerciseMin: min,
+        exerciseSessions: min > 0 || steps > 0 ? 1 : 0,
         caloriesBurned: cal,
         activityType: selectedType,
         source: 'Manual',
@@ -100,11 +120,23 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
       setRecords(updatedRecs);
       setShowLogModal(false);
       setStepsInput('');
+      setMinutesInput('30');
+      setCaloriesInput('180');
       setError(null);
       onActivityUpdated?.();
-    } catch (err) {
-      console.warn('Save activity failed:', err);
-      setError('Failed to save activity. Please try again.');
+    } catch (err: any) {
+      console.error('Save activity failed:', err);
+      let msg = 'Failed to save activity. Please try again.';
+      if (typeof err?.message === 'string' && err.message.trim()) {
+        msg = err.message.trim();
+      } else if (typeof err?.details === 'string' && err.details.trim()) {
+        msg = err.details.trim();
+      } else if (typeof err?.hint === 'string' && err.hint.trim()) {
+        msg = err.hint.trim();
+      }
+      setError(msg);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -277,10 +309,20 @@ export function WLActivity({ dailyStepGoal, onClose, onActivityUpdated }: Props)
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-[#1F7A5C] text-white rounded-xl font-bold text-xs shadow-xs hover:bg-[#15533E] flex items-center justify-center gap-1 transition-colors"
+              disabled={isSaving}
+              className="w-full py-2.5 bg-[#1F7A5C] text-white rounded-xl font-bold text-xs shadow-xs hover:bg-[#15533E] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1 transition-colors"
             >
-              <Check className="w-4 h-4" />
-              Save Workout
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving Workout...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Save Workout</span>
+                </>
+              )}
             </button>
           </form>
         )}
