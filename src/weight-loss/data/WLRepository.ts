@@ -6,6 +6,7 @@ import {
   WLGoal,
   WLCoachMessage,
   WLDailyNutritionSummary,
+  WLDashboardData,
 } from './WLTypes';
 import { supabase } from '../../core/supabase';
 
@@ -721,5 +722,74 @@ export class WLRepository {
 
   static async clearCoachMessages(): Promise<void> {
     coachMessagesStore = [];
+  }
+
+  /* ================= DASHBOARD CACHE & DATA ================= */
+  private static cachedDashboard: WLDashboardData | null = null;
+
+  static getCachedDashboard(): WLDashboardData | null {
+    return this.cachedDashboard;
+  }
+
+  static setCachedDashboard(data: WLDashboardData): void {
+    this.cachedDashboard = data;
+  }
+
+  static async fetchDashboardData(calorieGoalKcal: number): Promise<WLDashboardData> {
+    const [weightRes, mealsRes, waterRes, activityRes, summaryRes] = await Promise.allSettled([
+      this.getLatestWeight(),
+      this.getTodayMeals(),
+      this.getTodayWaterL(),
+      this.getTodayActivity(),
+      this.getTodayNutritionSummary(calorieGoalKcal),
+    ]);
+
+    const prev = this.cachedDashboard;
+
+    const latestWeightRecord =
+      weightRes.status === 'fulfilled'
+        ? weightRes.value
+        : (prev ? prev.latestWeightRecord : null);
+
+    const todayMeals =
+      mealsRes.status === 'fulfilled'
+        ? mealsRes.value
+        : (prev ? prev.todayMeals : []);
+
+    const todayWater =
+      waterRes.status === 'fulfilled'
+        ? waterRes.value
+        : (prev ? prev.todayWater : 0);
+
+    const todayActivity =
+      activityRes.status === 'fulfilled'
+        ? activityRes.value
+        : (prev ? prev.todayActivity : { steps: 0, exerciseMin: 0, caloriesBurned: 0 });
+
+    const nutritionSummary =
+      summaryRes.status === 'fulfilled'
+        ? summaryRes.value
+        : (prev ? prev.nutritionSummary : {
+            calories: 0,
+            proteinG: 0,
+            carbsG: 0,
+            fatG: 0,
+            fiberG: 0,
+            waterL: 0,
+            analysesCount: 0,
+            remainingCalories: calorieGoalKcal,
+          });
+
+    const result: WLDashboardData = {
+      latestWeightRecord,
+      todayMeals,
+      todayWater,
+      todayActivity,
+      nutritionSummary,
+      isInitialLoaded: true,
+    };
+
+    this.cachedDashboard = result;
+    return result;
   }
 }

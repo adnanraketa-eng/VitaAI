@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { BottomTab, ActiveModule, UserSharedProfile, WeightLossSettings } from '../../types';
 import { WLRepository } from '../data/WLRepository';
-import { WLWeightRecord, WLMealEntry, WLDailyNutritionSummary } from '../data/WLTypes';
+import { WLWeightRecord, WLMealEntry, WLDailyNutritionSummary, WLDashboardData } from '../data/WLTypes';
 import { WLWeight } from '../weight/WLWeight';
 import { WLFood } from '../food/WLFood';
 import { WLWater } from '../water/WLWater';
@@ -22,6 +22,8 @@ interface Props {
   onNavigate: (tab: BottomTab) => void;
   onSwitchGoal?: (goal: ActiveModule) => void;
   onUpdateSettings?: (settings: WeightLossSettings) => void;
+  initialDashboardData?: WLDashboardData | null;
+  onDataRefreshed?: (data: WLDashboardData) => void;
 }
 
 export function WLHome({
@@ -30,6 +32,8 @@ export function WLHome({
   onNavigate,
   onSwitchGoal,
   onUpdateSettings,
+  initialDashboardData,
+  onDataRefreshed,
 }: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -43,41 +47,50 @@ export function WLHome({
   const [showMealEntryOptions, setShowMealEntryOptions] = useState(false);
   const [showWaterBottomSheet, setShowWaterBottomSheet] = useState(false);
 
-  // Real data from WLRepository
-  const [latestWeightRecord, setLatestWeightRecord] = useState<WLWeightRecord | null>(null);
-  const [todayMeals, setTodayMeals] = useState<WLMealEntry[]>([]);
-  const [todayWater, setTodayWater] = useState<number>(0);
-  const [todayActivity, setTodayActivity] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>({
-    steps: 0,
-    exerciseMin: 0,
-    caloriesBurned: 0,
-  });
-  const [nutritionSummary, setNutritionSummary] = useState<WLDailyNutritionSummary>({
-    calories: 0,
-    proteinG: 0,
-    carbsG: 0,
-    fatG: 0,
-    fiberG: 0,
-    waterL: 0,
-    analysesCount: 0,
-    remainingCalories: settings.dailyCalorieGoalKcal,
-  });
+  // Cached/fallback initial data to prevent zero-state flicker
+  const initialCache = initialDashboardData || WLRepository.getCachedDashboard();
+
+  // Real data from WLRepository (initialized from cache/props if available)
+  const [latestWeightRecord, setLatestWeightRecord] = useState<WLWeightRecord | null>(
+    initialCache ? initialCache.latestWeightRecord : null
+  );
+  const [todayMeals, setTodayMeals] = useState<WLMealEntry[]>(
+    initialCache ? initialCache.todayMeals : []
+  );
+  const [todayWater, setTodayWater] = useState<number>(
+    initialCache ? initialCache.todayWater : 0
+  );
+  const [todayActivity, setTodayActivity] = useState<{ steps: number; exerciseMin: number; caloriesBurned: number }>(
+    initialCache ? initialCache.todayActivity : {
+      steps: 0,
+      exerciseMin: 0,
+      caloriesBurned: 0,
+    }
+  );
+  const [nutritionSummary, setNutritionSummary] = useState<WLDailyNutritionSummary>(
+    initialCache ? initialCache.nutritionSummary : {
+      calories: 0,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: 0,
+      fiberG: 0,
+      waterL: 0,
+      analysesCount: 0,
+      remainingCalories: settings.dailyCalorieGoalKcal,
+    }
+  );
 
   const refreshData = async () => {
     try {
-      const [weightRes, mealsRes, waterRes, activityRes, summaryRes] = await Promise.allSettled([
-        WLRepository.getLatestWeight(),
-        WLRepository.getTodayMeals(),
-        WLRepository.getTodayWaterL(),
-        WLRepository.getTodayActivity(),
-        WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal),
-      ]);
-
-      if (weightRes.status === 'fulfilled') setLatestWeightRecord(weightRes.value);
-      if (mealsRes.status === 'fulfilled') setTodayMeals(mealsRes.value);
-      if (waterRes.status === 'fulfilled') setTodayWater(waterRes.value);
-      if (activityRes.status === 'fulfilled') setTodayActivity(activityRes.value);
-      if (summaryRes.status === 'fulfilled') setNutritionSummary(summaryRes.value);
+      const data = await WLRepository.fetchDashboardData(settings.dailyCalorieGoalKcal);
+      setLatestWeightRecord(data.latestWeightRecord);
+      setTodayMeals(data.todayMeals);
+      setTodayWater(data.todayWater);
+      setTodayActivity(data.todayActivity);
+      setNutritionSummary(data.nutritionSummary);
+      if (onDataRefreshed) {
+        onDataRefreshed(data);
+      }
     } catch (err) {
       console.warn('WLHome refreshData error:', err);
     }

@@ -7,6 +7,7 @@ import { WLProgress } from './weight-loss/progress/WLProgress';
 import { WLCoach } from './weight-loss/coach/WLCoach';
 import { WLProfile } from './weight-loss/profile/WLProfile';
 import { WLRepository } from './weight-loss/data/WLRepository';
+import { WLDashboardData } from './weight-loss/data/WLTypes';
 import { ProfileScreen, calculateAge } from './profile/ProfileScreen';
 import { CancerHomeScreen } from './cancer-awareness/home/CancerHomeScreen';
 import { CancerHistoryScreen } from './cancer-awareness/history/CancerHistoryScreen';
@@ -197,6 +198,11 @@ export default function App() {
     dietaryPreferences: ['High-protein', 'Balanced']
   });
 
+  // Cached Weight Loss dashboard data across tab switches (avoids zero-state flicker)
+  const [wlDashboardData, setWlDashboardData] = useState<WLDashboardData | null>(() =>
+    WLRepository.getCachedDashboard()
+  );
+
   const isCancerAwareness = activeModule === 'cancer_awareness';
   const isDiabetesAwareness = activeModule === 'diabetes_awareness';
 
@@ -381,6 +387,8 @@ export default function App() {
                     setActiveTab('home');
                   }}
                   onUpdateSettings={setWeightLossSettings}
+                  initialDashboardData={wlDashboardData}
+                  onDataRefreshed={setWlDashboardData}
                 />
               )}
               {activeTab === 'history' && (

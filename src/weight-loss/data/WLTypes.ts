@@ -83,3 +83,12 @@ export interface WLDailyNutritionSummary {
   analysesCount?: number;
   remainingCalories: number;
 }
+
+export interface WLDashboardData {
+  latestWeightRecord: WLWeightRecord | null;
+  todayMeals: WLMealEntry[];
+  todayWater: number;
+  todayActivity: { steps: number; exerciseMin: number; caloriesBurned: number };
+  nutritionSummary: WLDailyNutritionSummary;
+  isInitialLoaded: boolean;
+}
