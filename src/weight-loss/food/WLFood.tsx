@@ -39,6 +39,12 @@ export function WLFood({
   onMealAdded 
 }: Props) {
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(initialMealType);
+  const [entryMode, setEntryMode] = useState<'scan' | 'gallery' | 'search' | 'manual'>(() => {
+    if (initialMode === 'scan') return 'scan';
+    if (initialMode === 'gallery') return 'gallery';
+    if (initialMode === 'search') return 'search';
+    return 'manual';
+  });
   const [foodName, setFoodName] = useState('');
   const [servingInput, setServingInput] = useState('');
   const [caloriesInput, setCaloriesInput] = useState('');
@@ -50,9 +56,9 @@ export function WLFood({
   const [showSearchList, setShowSearchList] = useState(initialMode === 'search');
   
   // Attached Photo & Live Camera state
-  const [capturedImage, setCapturedImage] = useState<string | null>(initialImage);
+  const [capturedImage, setCapturedImage] = useState<string | null>(initialMode === 'manual' ? null : initialImage);
   const [photoSource, setPhotoSource] = useState<'SCAN' | 'GALLERY' | null>(
-    initialMode === 'gallery' ? 'GALLERY' : (initialMode === 'scan' || initialImage ? 'SCAN' : null)
+    initialMode === 'manual' ? null : (initialMode === 'gallery' ? 'GALLERY' : (initialMode === 'scan' || initialImage ? 'SCAN' : null))
   );
   const [isLiveCameraOpen, setIsLiveCameraOpen] = useState<boolean>(initialMode === 'scan');
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -118,21 +124,43 @@ export function WLFood({
   // Trigger respective mode on entry
   useEffect(() => {
     if (initialMode === 'scan') {
+      setEntryMode('scan');
       setIsLiveCameraOpen(true);
       startLiveCamera();
     } else if (initialMode === 'gallery') {
+      setEntryMode('gallery');
       if (!initialImage) {
         galleryInputRef.current?.click();
       }
     } else if (initialMode === 'search') {
-      searchInputRef.current?.focus();
+      setEntryMode('search');
       setShowSearchList(true);
+      searchInputRef.current?.focus();
+    } else {
+      // True manual mode: clean blank form, no camera, no search, no AI data
+      setEntryMode('manual');
+      setIsLiveCameraOpen(false);
+      stopCameraStream();
+      setShowSearchList(false);
+      setAnalysisResult(null);
+      setAnalysisError(null);
+      setIsAnalyzing(false);
+      setCapturedImage(null);
+      setPhotoSource(null);
+      setFoodName('');
+      setServingInput('');
+      setCaloriesInput('');
+      setProteinInput('');
+      setCarbsInput('');
+      setFatInput('');
+      setFiberInput('');
+      setNotes('');
     }
 
     return () => {
       stopCameraStream();
     };
-  }, [initialMode]);
+  }, [initialMode, initialImage]);
 
   const analyzeFoodWithAI = useCallback(async (imageDataUrl: string) => {
     setIsAnalyzing(true);
@@ -240,6 +268,7 @@ export function WLFood({
         if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setEntryMode('scan');
           setCapturedImage(dataUrl);
           setPhotoSource('SCAN');
           stopCameraStream();
@@ -289,6 +318,7 @@ export function WLFood({
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
+      setEntryMode(source === 'GALLERY' ? 'gallery' : 'scan');
       setCapturedImage(result);
       setPhotoSource(source);
       analyzeFoodWithAI(result);
@@ -306,23 +336,36 @@ export function WLFood({
       return;
     }
 
-    // Validate numeric nutrition values
+    const isManual = entryMode === 'manual';
+
+    // Validate and sanitize numeric nutrition values
     const cal = Math.max(0, parseInt(caloriesInput) || 0);
     const p = Math.max(0, parseInt(proteinInput) || 0);
     const c = Math.max(0, parseInt(carbsInput) || 0);
     const f = Math.max(0, parseInt(fatInput) || 0);
-    const fibVal = fiberInput.trim() !== '' ? parseInt(fiberInput) : analysisResult?.fiber_g;
-    const fib = fibVal !== undefined && !isNaN(fibVal) ? Math.max(0, fibVal) : undefined;
+    let fib: number | undefined = undefined;
+    if (fiberInput.trim() !== '') {
+      const parsedFib = parseInt(fiberInput);
+      if (!isNaN(parsedFib)) {
+        fib = Math.max(0, parsedFib);
+      }
+    } else if (!isManual && analysisResult?.fiber_g !== undefined && !isNaN(analysisResult.fiber_g)) {
+      fib = Math.max(0, Math.round(analysisResult.fiber_g));
+    }
 
     setIsSaving(true);
     setError(null);
 
     try {
       let inputSource: 'SCAN' | 'GALLERY' | 'SEARCH' | 'MANUAL' = 'MANUAL';
-      if (capturedImage || analysisResult) {
-        inputSource = photoSource === 'GALLERY' ? 'GALLERY' : 'SCAN';
-      } else if (initialMode === 'search') {
+      if (isManual) {
+        inputSource = 'MANUAL';
+      } else if (entryMode === 'search') {
         inputSource = 'SEARCH';
+      } else if (entryMode === 'gallery' || photoSource === 'GALLERY') {
+        inputSource = 'GALLERY';
+      } else if (entryMode === 'scan' || photoSource === 'SCAN' || capturedImage || analysisResult) {
+        inputSource = 'SCAN';
       }
 
       const newMeal = await WLRepository.addMealEntry({
@@ -333,18 +376,18 @@ export function WLFood({
         carbsG: c,
         fatG: f,
         fiberG: fib,
-        serving: servingInput.trim() || analysisResult?.serving || 'per 1 serving',
+        serving: servingInput.trim() || (!isManual ? analysisResult?.serving : undefined) || '1 serving',
         inputSource,
         notes: notes.trim() || undefined,
-        photoUrl: capturedImage || undefined,
-        aiStatus: analysisResult ? 'AI complete' : 'Not analyzed',
-        nutritionScore: analysisResult?.nutrition_score,
-        nutritionScoreLabel: analysisResult?.score_label,
-        aiChoiceStatus: analysisResult?.health_classification,
-        aiInsight: analysisResult?.ai_insight,
-        aiNote: analysisResult?.ai_insight || notes.trim() || undefined,
-        recommendations: analysisResult?.ai_suggestions,
-        detectedIngredients: analysisResult?.detected_ingredients,
+        photoUrl: !isManual ? (capturedImage || undefined) : undefined,
+        aiStatus: !isManual && analysisResult ? 'AI complete' : 'Not analyzed',
+        nutritionScore: !isManual ? analysisResult?.nutrition_score : undefined,
+        nutritionScoreLabel: !isManual ? analysisResult?.score_label : undefined,
+        aiChoiceStatus: !isManual ? analysisResult?.health_classification : undefined,
+        aiInsight: !isManual ? analysisResult?.ai_insight : undefined,
+        aiNote: !isManual ? (analysisResult?.ai_insight || notes.trim() || undefined) : (notes.trim() || undefined),
+        recommendations: !isManual ? analysisResult?.ai_suggestions : undefined,
+        detectedIngredients: !isManual ? analysisResult?.detected_ingredients : undefined,
       });
 
       // Only update local state, invoke callback and close AFTER successful insert
@@ -561,7 +604,7 @@ export function WLFood({
         </div>
 
         {/* Attached Photo Card (if photo captured/selected) */}
-        {capturedImage && (
+        {entryMode !== 'manual' && capturedImage && (
           <div className="relative bg-white rounded-3xl p-3 border border-[#DCE6E0] shadow-xs overflow-hidden">
             <img
               src={capturedImage}
@@ -613,7 +656,7 @@ export function WLFood({
         )}
 
         {/* AI Analysis Feedback & Insight Card (when analysis complete or error) */}
-        {analysisError && capturedImage && (
+        {entryMode !== 'manual' && analysisError && capturedImage && (
           <div className="p-3.5 bg-[#FFF1E8] border border-[#FF8B5E]/30 rounded-2xl text-xs text-[#C84A22] space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -633,7 +676,7 @@ export function WLFood({
           </div>
         )}
 
-        {analysisResult && !isAnalyzing && (
+        {entryMode !== 'manual' && analysisResult && !isAnalyzing && (
           <div className="bg-[#EAF8F2] rounded-3xl p-4 border border-[#C8EBDC] space-y-3 animate-in fade-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -687,10 +730,10 @@ export function WLFood({
         )}
 
         {/* SINGLE REUSABLE MEAL DETAILS FORM */}
-        <form onSubmit={handleSaveMeal} className="bg-white rounded-3xl p-5 border border-[#DCE6E0] shadow-xs space-y-4">
+        <form onSubmit={handleSaveMeal} className="bg-white rounded-3xl p-4 sm:p-5 border border-[#DCE6E0] shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#1B2B24]">Meal Details</h2>
-            {analysisResult && (
+            {entryMode !== 'manual' && analysisResult && (
               <span className="text-[11px] text-[#1F7A5C] font-semibold flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> Auto-filled from AI scan
               </span>
@@ -712,18 +755,20 @@ export function WLFood({
                 type="text"
                 placeholder="e.g. Grilled Chicken Salad"
                 value={foodName}
-                onFocus={() => setShowSearchList(true)}
+                onFocus={() => {
+                  if (entryMode === 'search') setShowSearchList(true);
+                }}
                 onChange={(e) => {
                   setFoodName(e.target.value);
-                  setShowSearchList(true);
+                  if (entryMode === 'search') setShowSearchList(true);
                 }}
                 className="w-full pl-9 pr-4 py-2.5 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-sm font-semibold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
               <Search className="w-4 h-4 text-[#8A9A92] absolute left-3 top-3" />
             </div>
 
-            {/* Food Search Suggestions */}
-            {(filteredSuggestions.length > 0 || (showSearchList && !foodName.trim())) && (
+            {/* Food Search Suggestions - only active in search mode */}
+            {entryMode === 'search' && (filteredSuggestions.length > 0 || (showSearchList && !foodName.trim())) && (
               <div className="mt-1 bg-white border border-[#DCE6E0] rounded-2xl shadow-lg max-h-44 overflow-y-auto divide-y divide-[#E7EEE9]">
                 <div className="px-3 py-1.5 bg-[#F6FAF7] text-[10px] font-bold uppercase text-[#8A9A92] tracking-wider">
                   {foodName.trim() ? 'Search Results' : 'Suggested Foods'}
@@ -755,55 +800,55 @@ export function WLFood({
           </div>
 
           {/* Macro Inputs Grid */}
-          <div className="grid grid-cols-5 gap-2">
-            <div>
-              <label className="text-[11px] font-semibold text-[#4C5F55] block mb-1">Calories</label>
+          <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+            <div className="min-w-0">
+              <label className="text-[11px] font-semibold text-[#4C5F55] block mb-1 whitespace-nowrap">Calories</label>
               <input
                 type="number"
-                placeholder="kcal"
+                placeholder=""
                 value={caloriesInput}
                 onChange={(e) => setCaloriesInput(e.target.value)}
-                className="w-full px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                className="w-full px-1.5 sm:px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-[#1F7A5C] block mb-1">Protein (g)</label>
+            <div className="min-w-0">
+              <label className="text-[11px] font-semibold text-[#1F7A5C] block mb-1 whitespace-nowrap">Protein (g)</label>
               <input
                 type="number"
-                placeholder="g"
+                placeholder=""
                 value={proteinInput}
                 onChange={(e) => setProteinInput(e.target.value)}
-                className="w-full px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                className="w-full px-1.5 sm:px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-[#2E8B8B] block mb-1">Carbs (g)</label>
+            <div className="min-w-0">
+              <label className="text-[11px] font-semibold text-[#2E8B8B] block mb-1 whitespace-nowrap">Carbs (g)</label>
               <input
                 type="number"
-                placeholder="g"
+                placeholder=""
                 value={carbsInput}
                 onChange={(e) => setCarbsInput(e.target.value)}
-                className="w-full px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                className="w-full px-1.5 sm:px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-[#FF8B5E] block mb-1">Fat (g)</label>
+            <div className="min-w-0">
+              <label className="text-[11px] font-semibold text-[#FF8B5E] block mb-1 whitespace-nowrap">Fat (g)</label>
               <input
                 type="number"
-                placeholder="g"
+                placeholder=""
                 value={fatInput}
                 onChange={(e) => setFatInput(e.target.value)}
-                className="w-full px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                className="w-full px-1.5 sm:px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1">Fiber (g)</label>
+            <div className="min-w-0">
+              <label className="text-[11px] font-semibold text-[#8A9A92] block mb-1 whitespace-nowrap">Fiber (g)</label>
               <input
                 type="number"
-                placeholder="g"
+                placeholder=""
                 value={fiberInput}
                 onChange={(e) => setFiberInput(e.target.value)}
-                className="w-full px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
+                className="w-full px-1.5 sm:px-2 py-2 bg-[#F6FAF7] border border-[#DCE6E0] rounded-xl text-xs font-bold text-[#1B2B24] focus:outline-none focus:border-[#1F7A5C]"
               />
             </div>
           </div>
@@ -822,17 +867,17 @@ export function WLFood({
           <button
             type="submit"
             disabled={isSaving}
-            className="w-full py-3 bg-[#1F7A5C] text-white rounded-xl font-bold text-xs shadow-xs hover:bg-[#15533E] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors"
+            className="w-full py-3 bg-[#1F7A5C] text-white rounded-xl font-bold text-xs shadow-xs hover:bg-[#15533E] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider"
           >
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Saving {mealType.toUpperCase()}...
+                SAVING {mealType.toUpperCase()}...
               </>
             ) : (
               <>
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                Log {mealType.toUpperCase()}
+                LOG {mealType.toUpperCase()}
               </>
             )}
           </button>
