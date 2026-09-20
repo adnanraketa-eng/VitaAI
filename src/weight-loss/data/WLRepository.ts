@@ -306,6 +306,7 @@ export class WLRepository {
       .single();
 
     if (error) throw error;
+    this.clearPeriodHabitsCache();
     return mapMealRow(data);
   }
 
@@ -318,6 +319,7 @@ export class WLRepository {
       .eq('user_id', user.id);
 
     if (error) throw error;
+    this.clearPeriodHabitsCache();
   }
 
   static async getTodayNutritionSummary(targetKcal = 1800): Promise<WLDailyNutritionSummary> {
@@ -410,6 +412,7 @@ export class WLRepository {
       .single();
 
     if (error) throw error;
+    this.clearPeriodHabitsCache();
     return {
       id: String(data.id),
       amountL: parseFloat(((Number(data.amount_ml) || 0) / 1000).toFixed(3)),
@@ -431,6 +434,7 @@ export class WLRepository {
       .lte('recorded_at', endOfDay);
 
     if (error) throw error;
+    this.clearPeriodHabitsCache();
   }
 
   /* ================= ACTIVITY RECORDS ================= */
@@ -591,6 +595,7 @@ export class WLRepository {
         .single();
 
       if (updateError) throw updateError;
+      this.clearPeriodHabitsCache();
       return mapActivityRow(updatedData);
     } else {
       const { data: insertedData, error: insertError } = await supabase
@@ -608,6 +613,7 @@ export class WLRepository {
         .single();
 
       if (insertError) throw insertError;
+      this.clearPeriodHabitsCache();
       return mapActivityRow(insertedData);
     }
   }
@@ -801,6 +807,12 @@ export class WLRepository {
 
   /* ================= PERIOD HABIT CALCULATIONS ================= */
 
+  private static periodHabitsCache = new Map<string, { metrics: WLPeriodHabitMetrics; timestamp: number }>();
+
+  static clearPeriodHabitsCache(): void {
+    this.periodHabitsCache.clear();
+  }
+
   /**
    * Computes the exact local calendar date range and day count for the given period:
    * - 'week': current local calendar week, Monday through today.
@@ -868,11 +880,82 @@ export class WLRepository {
   }
 
   /**
+   * Fetches authentic records from Supabase strictly bounded by the period's date range,
+   * calculates period habit metrics, and caches the result by period key.
+   *
+   * Database verification:
+   * - meal_log_entries: uses recorded_at (TIMESTAMPTZ)
+   * - water_records: uses recorded_at (TIMESTAMPTZ)
+   * - activity_daily_records: uses activity_date (DATE 'YYYY-MM-DD')
+   * - User isolation: strictly filters to authenticated user_id
+   * - No demo fallbacks when empty (returns exact 0 averages)
+   */
+  static async fetchPeriodHabits(
+    period: WLProgressPeriod,
+    now: Date = new Date()
+  ): Promise<WLPeriodHabitMetrics> {
+    const range = this.getPeriodDateRange(period, now);
+    const cacheKey = `${period}_${range.startDateStr}_${range.endDateStr}_${range.dayCount}`;
+
+    const cached = this.periodHabitsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 30_000) {
+      return cached.metrics;
+    }
+
+    const user = await requireAuthUser();
+
+    // 1. Query public.meal_log_entries for authenticated user within [startDate, endDate]
+    const { data: mealRows, error: mealErr } = await supabase
+      .from('meal_log_entries')
+      .select('id, food_name, meal_type, calories, protein_g, carbs_g, fat_g, recorded_at')
+      .eq('user_id', user.id)
+      .gte('recorded_at', range.startDate.toISOString())
+      .lte('recorded_at', range.endDate.toISOString())
+      .order('recorded_at', { ascending: false });
+
+    if (mealErr) throw mealErr;
+
+    // 2. Query public.water_records for authenticated user within [startDate, endDate]
+    const { data: waterRows, error: waterErr } = await supabase
+      .from('water_records')
+      .select('id, amount_ml, recorded_at')
+      .eq('user_id', user.id)
+      .gte('recorded_at', range.startDate.toISOString())
+      .lte('recorded_at', range.endDate.toISOString())
+      .order('recorded_at', { ascending: false });
+
+    if (waterErr) throw waterErr;
+
+    // 3. Query public.activity_daily_records for authenticated user within [startDateStr, endDateStr]
+    const { data: activityRows, error: actErr } = await supabase
+      .from('activity_daily_records')
+      .select('id, user_id, activity_date, steps, exercise_minutes, exercise_sessions')
+      .eq('user_id', user.id)
+      .gte('activity_date', range.startDateStr)
+      .lte('activity_date', range.endDateStr)
+      .order('activity_date', { ascending: false });
+
+    if (actErr) throw actErr;
+
+    const meals: WLMealEntry[] = (mealRows || []).map(mapMealRow);
+    const water: WLWaterRecord[] = (waterRows || []).map((r) => ({
+      id: String(r.id),
+      amountL: parseFloat(((Number(r.amount_ml) || 0) / 1000).toFixed(3)),
+      loggedAt: r.recorded_at,
+    }));
+    const activities: WLActivityRecord[] = (activityRows || []).map(mapActivityRow);
+
+    const metrics = this.calculatePeriodHabits(period, meals, water, activities, now);
+    this.periodHabitsCache.set(cacheKey, { metrics, timestamp: Date.now() });
+    return metrics;
+  }
+
+  /**
    * Calculates the true period-wide daily habit averages:
-   * - Calories: average daily calories logged during the period (unlogged days count as 0).
-   * - Protein: average daily protein logged during the period (unlogged days count as 0).
-   * - Water: average daily water intake (summed per local day first, then averaged over the period).
-   * - Steps: average daily steps from activity records (days with no record count as 0).
+   * - Calories: total calories logged divided by the period's day count.
+   * - Protein: total protein (g) logged divided by the period's day count.
+   * - Water: total water recorded divided by the period's day count.
+   * - Steps: total steps recorded divided by the period's day count.
    */
   static calculatePeriodHabits(
     period: WLProgressPeriod,
@@ -930,6 +1013,23 @@ export class WLRepository {
       totalSteps += steps;
     }
     const avgSteps = range.dayCount > 0 ? Math.round(totalSteps / range.dayCount) : 0;
+
+    // Development-only diagnostic logging
+    console.log('[WLHabits Diagnostic]', {
+      selectedPeriod: period,
+      rangeStartDate: range.startDateStr,
+      rangeEndDate: range.endDateStr,
+      daysInRange: range.dayCount,
+      mealRecordsFetched: periodMeals.length,
+      waterRecordsFetched: periodWater.length,
+      activityRecordsFetched: periodActivities.length,
+      calculatedMetrics: {
+        avgCalories,
+        avgProtein,
+        avgWater,
+        avgSteps,
+      },
+    });
 
     return {
       avgCalories,

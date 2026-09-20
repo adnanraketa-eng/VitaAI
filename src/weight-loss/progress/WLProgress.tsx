@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, Calendar, MoreVertical, Check, MapPin, Flag,
   Flame, Award, Droplets, Footprints, Leaf, X, Trophy, Zap, Scale, Plus
@@ -12,6 +12,7 @@ import {
   WLActivityRecord, 
   WLDailyNutritionSummary,
   WLProgressPeriod,
+  WLPeriodHabitMetrics,
 } from '../data/WLTypes';
 import { WLWeight } from '../weight/WLWeight';
 
@@ -50,9 +51,17 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     caloriesBurned: 0,
   });
 
+  // Dedicated state for period-specific habit calculations with request race-condition protection
+  const [periodHabits, setPeriodHabits] = useState<Record<WLProgressPeriod, WLPeriodHabitMetrics | null>>({
+    week: null,
+    '30d': null,
+    '90d': null,
+  });
+  const activeRequestIdRef = useRef(0);
+
   const loadProgressData = async () => {
     try {
-      const [weights, meals, water, acts, nut, tWat, tAct] = await Promise.all([
+      const [weights, meals, water, acts, nut, tWat, tAct, pMetrics] = await Promise.all([
         WLRepository.getWeightRecords(),
         WLRepository.getMealEntries(),
         WLRepository.getWaterRecords(),
@@ -60,6 +69,7 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
         WLRepository.getNutritionSummaryForDate(new Date(), settings.dailyCalorieGoalKcal),
         WLRepository.getTodayWaterL(),
         WLRepository.getTodayActivity(),
+        WLRepository.fetchPeriodHabits(period),
       ]);
       setWeightRecords(weights);
       setMealEntries(meals);
@@ -68,6 +78,7 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       setTodayNutrition(nut);
       setTodayWater(tWat);
       setTodayAct(tAct);
+      setPeriodHabits((prev) => ({ ...prev, [period]: pMetrics }));
     } catch (err) {
       console.warn('WLProgress loadData error:', err);
     }
@@ -76,6 +87,29 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   useEffect(() => {
     loadProgressData();
   }, [settings.dailyCalorieGoalKcal]);
+
+  // Fetch period habit metrics whenever the selected period changes
+  useEffect(() => {
+    let isCancelled = false;
+    const currentReqId = ++activeRequestIdRef.current;
+
+    WLRepository.fetchPeriodHabits(period)
+      .then((metrics) => {
+        if (!isCancelled && currentReqId === activeRequestIdRef.current) {
+          setPeriodHabits((prev) => ({
+            ...prev,
+            [period]: metrics,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn(`[WLProgress] Failed to fetch period habits for ${period}:`, err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [period]);
 
   const currentWeight = weightRecords[0]?.weightLb || settings.currentWeightLb || 0;
   const earliestRecord = weightRecords[weightRecords.length - 1];
@@ -125,10 +159,13 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (ringCircumference * progressPercent) / 100;
 
-  // Real period data calculated dynamically from existing repository records
+  // Real period data calculated dynamically from period-filtered repository records
   const habitMetrics = useMemo(() => {
+    if (periodHabits[period]) {
+      return periodHabits[period]!;
+    }
     return WLRepository.calculatePeriodHabits(period, mealEntries, waterRecords, activityRecords);
-  }, [period, mealEntries, waterRecords, activityRecords]);
+  }, [period, periodHabits, mealEntries, waterRecords, activityRecords]);
 
   // Selected period values (uses period-specific data directly from habitMetrics)
   const caloriesVal = habitMetrics.avgCalories;
