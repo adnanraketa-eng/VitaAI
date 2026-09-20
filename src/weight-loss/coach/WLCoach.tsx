@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
   Send, Sparkles, Bot, User, Bell, ArrowLeft, 
-  RotateCcw, Check, RefreshCw 
+  RotateCcw, Check, RefreshCw, AlertCircle 
 } from 'lucide-react';
 import { BottomTab, UserSharedProfile, WeightLossSettings } from '../../types';
 import { WLRepository } from '../data/WLRepository';
 import { WLCoachMessage } from '../data/WLTypes';
+import { supabase } from '../../core/supabase/client';
 
 interface Props {
   profile: UserSharedProfile;
@@ -24,6 +25,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
   const [messages, setMessages] = useState<WLCoachMessage[]>([initialGreeting]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, errorMessage]);
 
   const quickChips = [
     'How do I hit my protein goal today?',
@@ -57,72 +59,52 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
     const query = textToSend || input;
     if (!query.trim() || isLoading) return;
 
+    setErrorMessage(null);
+    let userMsg: WLCoachMessage | null = null;
+
     try {
-      const userMsg = await WLRepository.addCoachMessage('user', query.trim());
-      setMessages((prev) => [...prev, userMsg]);
+      // 1. Store and display user message
+      userMsg = await WLRepository.addCoachMessage('user', query.trim());
+      setMessages((prev) => [...prev, userMsg!]);
       if (!textToSend) setInput('');
       setIsLoading(true);
 
-      // Prepare real context from repository
-      const [latestWeightRecord, todaySummary, todayWater, todayActivity] = await Promise.all([
-        WLRepository.getLatestWeight(),
-        WLRepository.getTodayNutritionSummary(settings.dailyCalorieGoalKcal),
-        WLRepository.getTodayWaterL(),
-        WLRepository.getTodayActivity(),
-      ]);
-      const latestWeight = latestWeightRecord?.weightLb || settings.currentWeightLb;
+      // 2. Prepare recent conversation history (limit to most recent 12 messages, excluding current message)
+      // Map 'user' -> 'user' and 'ai' -> 'assistant'
+      const history = messages
+        .filter((m) => m.text && m.text.trim().length > 0)
+        .slice(-12)
+        .map((m) => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text.trim(),
+        }));
 
-      const systemContext = `
-You are the VitaAI Weight Loss and Nutrition Coach.
-User: ${profile.fullName} (Age: ${profile.age || 'N/A'}, Sex: ${profile.gender || 'N/A'}, Height: ${profile.heightCm || 'N/A'}cm).
-Current Weight: ${latestWeight} lb | Goal Weight: ${settings.goalWeightLb} lb | Target Pace: ${settings.targetPace}.
-Daily Targets: ${settings.dailyCalorieGoalKcal} kcal, ${settings.dailyProteinGoalG}g Protein, ${settings.dailyWaterGoalL}L Water, ${settings.dailyStepGoal} Steps.
-Today's Real Stats:
-- Calories logged: ${todaySummary.calories} kcal (${todaySummary.remainingCalories} kcal left)
-- Protein logged: ${todaySummary.proteinG}g / ${settings.dailyProteinGoalG}g
-- Hydration: ${todayWater}L
-- Steps: ${todayActivity.steps}
-- Dietary Preferences: ${settings.dietaryPreferences.join(', ')}
+      // 3. Invoke deployed Supabase Edge Function 'ai-coach' using authenticated Supabase client
+      const { data, error } = await supabase.functions.invoke('ai-coach', {
+        body: {
+          message: query.trim(),
+          history,
+        },
+      });
 
-Guidelines:
-- Give compassionate, science-grounded, empathetic nutritional and weight-loss advice.
-- Stay strictly in Weight Loss mode; do not introduce unsolicited Cancer or Diabetes medical treatments.
-- Keep response concise, structured with bullet points where helpful, and encouraging.
-      `.trim();
-
-      try {
-        const response = await fetch('/api/gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `${systemContext}\n\nUser Question: ${query.trim()}`,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const replyText = data.text || data.response || data.message || "I'm analyzing your weight loss journey. Focus on steady protein intake and hydration today!";
-          const aiMsg = await WLRepository.addCoachMessage('ai', replyText);
-          setMessages((prev) => [...prev, aiMsg]);
-        } else {
-          throw new Error('AI service error');
-        }
-      } catch (err) {
-        // Fallback context-aware response
-        let fallback = `Based on your daily goal of ${settings.dailyCalorieGoalKcal} kcal and ${settings.dailyProteinGoalG}g of protein, `;
-        if (todaySummary.proteinG < settings.dailyProteinGoalG * 0.5) {
-          fallback += `you still need ${settings.dailyProteinGoalG - todaySummary.proteinG}g of protein today. Prioritize lean chicken, Greek yogurt, or a whey shake with your next meal!`;
-        } else {
-          fallback += `you're on great track with your macros today. Maintain consistent hydration (${todayWater}/${settings.dailyWaterGoalL}L logged) to stay energized.`;
-        }
-
-        const aiMsg = await WLRepository.addCoachMessage('ai', fallback);
-        setMessages((prev) => [...prev, aiMsg]);
-      } finally {
-        setIsLoading(false);
+      if (error) {
+        throw new Error(error.message || 'Unable to connect to the AI coach service.');
       }
-    } catch (err) {
-      console.warn('Error sending coach message:', err);
+
+      // 4. Handle response { success, reply, contextLoaded }
+      if (data && data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
+        const aiMsg = await WLRepository.addCoachMessage('ai', data.reply.trim());
+        setMessages((prev) => [...prev, aiMsg]);
+      } else if (data && data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'AI coach encountered an issue.');
+      } else {
+        throw new Error('AI coach did not return a response. Please try again.');
+      }
+    } catch (err: unknown) {
+      console.warn('WLCoach AI service error:', err);
+      const errText = err instanceof Error ? err.message : 'Unable to connect to AI Coach. Please check your connection and try again.';
+      setErrorMessage(errText);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -130,6 +112,7 @@ Guidelines:
   const handleClearHistory = async () => {
     try {
       await WLRepository.clearCoachMessages();
+      setErrorMessage(null);
       setMessages([
         {
           id: `fresh_${Date.now()}`,
@@ -225,6 +208,16 @@ Guidelines:
               <RefreshCw className="w-4 h-4 animate-spin" />
             </div>
             <span>Coach is analyzing your nutrition targets...</span>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-[#FFF4F2] border border-[#FCDAD7] text-xs text-[#C53030]">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#E53E3E]" />
+            <div className="flex-1">
+              <span className="font-semibold block text-[11px]">Could not get reply</span>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-[#9B2C2C]">{errorMessage}</p>
+            </div>
           </div>
         )}
 
