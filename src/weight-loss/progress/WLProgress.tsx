@@ -57,10 +57,12 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     '30d': null,
     '90d': null,
   });
+  const [fetchStatus, setFetchStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const activeRequestIdRef = useRef(0);
 
   const loadProgressData = async () => {
     try {
+      setFetchStatus('loading');
       const [weights, meals, water, acts, nut, tWat, tAct, pMetrics] = await Promise.all([
         WLRepository.getWeightRecords(),
         WLRepository.getMealEntries(),
@@ -79,8 +81,10 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       setTodayWater(tWat);
       setTodayAct(tAct);
       setPeriodHabits((prev) => ({ ...prev, [period]: pMetrics }));
+      setFetchStatus('success');
     } catch (err) {
       console.warn('WLProgress loadData error:', err);
+      setFetchStatus('error');
     }
   };
 
@@ -92,6 +96,7 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   useEffect(() => {
     let isCancelled = false;
     const currentReqId = ++activeRequestIdRef.current;
+    setFetchStatus('loading');
 
     WLRepository.fetchPeriodHabits(period)
       .then((metrics) => {
@@ -100,10 +105,14 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
             ...prev,
             [period]: metrics,
           }));
+          setFetchStatus('success');
         }
       })
       .catch((err) => {
-        console.warn(`[WLProgress] Failed to fetch period habits for ${period}:`, err);
+        if (!isCancelled && currentReqId === activeRequestIdRef.current) {
+          console.warn(`[WLProgress] Failed to fetch period habits for ${period}:`, err);
+          setFetchStatus('error');
+        }
       });
 
     return () => {
@@ -180,6 +189,34 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   const stepsVal = habitMetrics.avgSteps;
   const stepsTarget = settings.dailyStepGoal || 9000;
   const stepsTargetLabel = stepsTarget >= 1000 ? `${(stepsTarget / 1000).toFixed(0)}k` : `${stepsTarget}`;
+
+  // Development/Testing runtime diagnostic logger
+  useEffect(() => {
+    console.log('[WLProgress Runtime Diagnostics]', {
+      selectedPeriod: period,
+      startDate: habitMetrics.range.startDateStr,
+      endDate: habitMetrics.range.endDateStr,
+      dayCount: habitMetrics.range.dayCount,
+      fetchStatus,
+      mealRecordCount: habitMetrics.mealCount,
+      waterRecordCount: habitMetrics.waterCount,
+      activityRecordCount: habitMetrics.activityCount,
+      totalCalories: habitMetrics.totalCalories,
+      totalProtein: habitMetrics.totalProtein,
+      totalWaterL: habitMetrics.totalWaterL,
+      totalSteps: habitMetrics.totalSteps,
+      avgCalories: habitMetrics.avgCalories,
+      avgProtein: habitMetrics.avgProtein,
+      avgWater: habitMetrics.avgWater,
+      avgSteps: habitMetrics.avgSteps,
+      cardValues: {
+        caloriesVal,
+        proteinVal,
+        waterVal,
+        stepsVal,
+      },
+    });
+  }, [period, habitMetrics, fetchStatus, caloriesVal, proteinVal, waterVal, stepsVal]);
 
   const habitSectionTitle = period === 'week' 
     ? "THIS WEEK'S HABITS" 
@@ -665,6 +702,44 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
               {habitSectionTitle}
             </span>
             <h2 className="text-xl font-bold text-[#1B2B24]">{habitSectionSubtitle}</h2>
+          </div>
+
+          {/* TEMPORARY VISIBLE DEBUG INFORMATION */}
+          <div id="progress-habit-debug-info" className="bg-[#182620] text-[#E8F5EE] rounded-2xl p-3.5 border border-[#2E8B8B]/40 shadow-sm space-y-2.5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+              <span className="text-[11px] font-bold tracking-wide uppercase text-[#7FD8BE]">
+                Runtime Habit Diagnostics
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                fetchStatus === 'success' ? 'bg-[#1F7A5C] text-white' :
+                fetchStatus === 'loading' ? 'bg-amber-600 text-white' :
+                fetchStatus === 'error' ? 'bg-rose-600 text-white' : 'bg-gray-700 text-gray-200'
+              }`}>
+                {fetchStatus}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+              <div><span className="text-[#8A9A92]">selected period:</span> <strong className="text-white">{period}</strong></div>
+              <div><span className="text-[#8A9A92]">dayCount:</span> <strong className="text-white">{habitMetrics.range.dayCount}</strong></div>
+              <div><span className="text-[#8A9A92]">start date:</span> <span className="text-white">{habitMetrics.range.startDateStr}</span></div>
+              <div><span className="text-[#8A9A92]">end date:</span> <span className="text-white">{habitMetrics.range.endDateStr}</span></div>
+              <div><span className="text-[#8A9A92]">fetch status:</span> <span className="text-white">{fetchStatus}</span></div>
+              <div><span className="text-[#8A9A92]">meal records:</span> <strong className="text-[#FFB39A]">{habitMetrics.mealCount}</strong></div>
+              <div><span className="text-[#8A9A92]">water records:</span> <strong className="text-[#9AD4EA]">{habitMetrics.waterCount}</strong></div>
+              <div><span className="text-[#8A9A92]">activity records:</span> <strong className="text-[#9AEAC4]">{habitMetrics.activityCount}</strong></div>
+            </div>
+
+            <div className="border-t border-white/10 pt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono">
+              <div><span className="text-[#8A9A92]">total calories:</span> <strong className="text-white">{habitMetrics.totalCalories}</strong></div>
+              <div><span className="text-[#8A9A92]">avg calories:</span> <strong className="text-[#FF7A50]">{caloriesVal}</strong></div>
+              <div><span className="text-[#8A9A92]">total protein:</span> <strong className="text-white">{habitMetrics.totalProtein} g</strong></div>
+              <div><span className="text-[#8A9A92]">avg protein:</span> <strong className="text-[#7FD8BE]">{proteinVal} g</strong></div>
+              <div><span className="text-[#8A9A92]">total water:</span> <strong className="text-white">{habitMetrics.totalWaterL.toFixed(1)} L</strong></div>
+              <div><span className="text-[#8A9A92]">avg water:</span> <strong className="text-[#3E8FB0]">{waterVal.toFixed(1)} L</strong></div>
+              <div><span className="text-[#8A9A92]">total steps:</span> <strong className="text-white">{habitMetrics.totalSteps.toLocaleString()}</strong></div>
+              <div><span className="text-[#8A9A92]">avg steps:</span> <strong className="text-[#2E8B8B]">{stepsVal.toLocaleString()}</strong></div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

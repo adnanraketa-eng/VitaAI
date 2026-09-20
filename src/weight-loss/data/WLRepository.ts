@@ -1040,6 +1040,9 @@ export class WLRepository {
       totalProtein,
       totalWaterL,
       totalSteps,
+      mealCount: periodMeals.length,
+      waterCount: periodWater.length,
+      activityCount: periodActivities.length,
       range,
     };
   }

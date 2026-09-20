@@ -113,5 +113,8 @@ export interface WLPeriodHabitMetrics {
   totalProtein: number;
   totalWaterL: number;
   totalSteps: number;
+  mealCount: number;
+  waterCount: number;
+  activityCount: number;
   range: WLPeriodDateRange;
 }
