@@ -92,3 +92,26 @@ export interface WLDashboardData {
   nutritionSummary: WLDailyNutritionSummary;
   isInitialLoaded: boolean;
 }
+
+export type WLProgressPeriod = 'week' | '30d' | '90d';
+
+export interface WLPeriodDateRange {
+  period: WLProgressPeriod;
+  startDate: Date;
+  endDate: Date;
+  startDateStr: string; // YYYY-MM-DD local
+  endDateStr: string;   // YYYY-MM-DD local
+  dayCount: number;
+}
+
+export interface WLPeriodHabitMetrics {
+  avgCalories: number;
+  avgProtein: number;
+  avgWater: number;
+  avgSteps: number;
+  totalCalories: number;
+  totalProtein: number;
+  totalWaterL: number;
+  totalSteps: number;
+  range: WLPeriodDateRange;
+}

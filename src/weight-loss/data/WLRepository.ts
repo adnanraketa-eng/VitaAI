@@ -7,10 +7,16 @@ import {
   WLCoachMessage,
   WLDailyNutritionSummary,
   WLDashboardData,
+  WLProgressPeriod,
+  WLPeriodDateRange,
+  WLPeriodHabitMetrics,
 } from './WLTypes';
 import { supabase } from '../../core/supabase';
 
 export function getLocalDateString(dateInput?: Date | string): string {
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    return dateInput.trim();
+  }
   const d = dateInput ? (typeof dateInput === 'string' ? new Date(dateInput) : dateInput) : new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -792,4 +798,150 @@ export class WLRepository {
     this.cachedDashboard = result;
     return result;
   }
+
+  /* ================= PERIOD HABIT CALCULATIONS ================= */
+
+  /**
+   * Computes the exact local calendar date range and day count for the given period:
+   * - 'week': current local calendar week, Monday through today.
+   * - '30d': today and the preceding 29 local calendar days (30 days total).
+   * - '90d': today and the preceding 89 local calendar days (90 days total).
+   */
+  static getPeriodDateRange(period: WLProgressPeriod, now: Date = new Date()): WLPeriodDateRange {
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const date = now.getDate();
+
+    const todayStart = new Date(year, month, date, 0, 0, 0, 0);
+    const todayEnd = new Date(year, month, date, 23, 59, 59, 999);
+    const todayStr = getLocalDateString(todayStart);
+
+    if (period === 'week') {
+      // Current local calendar week: Monday through today
+      const dayOfWeek = todayStart.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(todayStart);
+      monday.setDate(todayStart.getDate() + diffToMonday);
+      monday.setHours(0, 0, 0, 0);
+
+      const dayCount = dayOfWeek === 0 ? 7 : dayOfWeek;
+
+      return {
+        period,
+        startDate: monday,
+        endDate: todayEnd,
+        startDateStr: getLocalDateString(monday),
+        endDateStr: todayStr,
+        dayCount,
+      };
+    }
+
+    if (period === '30d') {
+      // Today and preceding 29 local calendar days = 30 days total
+      const startDate = new Date(todayStart);
+      startDate.setDate(todayStart.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+
+      return {
+        period,
+        startDate,
+        endDate: todayEnd,
+        startDateStr: getLocalDateString(startDate),
+        endDateStr: todayStr,
+        dayCount: 30,
+      };
+    }
+
+    // 90d: Today and preceding 89 local calendar days = 90 days total
+    const startDate = new Date(todayStart);
+    startDate.setDate(todayStart.getDate() - 89);
+    startDate.setHours(0, 0, 0, 0);
+
+    return {
+      period,
+      startDate,
+      endDate: todayEnd,
+      startDateStr: getLocalDateString(startDate),
+      endDateStr: todayStr,
+      dayCount: 90,
+    };
+  }
+
+  /**
+   * Calculates the true period-wide daily habit averages:
+   * - Calories: average daily calories logged during the period (unlogged days count as 0).
+   * - Protein: average daily protein logged during the period (unlogged days count as 0).
+   * - Water: average daily water intake (summed per local day first, then averaged over the period).
+   * - Steps: average daily steps from activity records (days with no record count as 0).
+   */
+  static calculatePeriodHabits(
+    period: WLProgressPeriod,
+    meals: WLMealEntry[],
+    water: WLWaterRecord[],
+    activities: WLActivityRecord[],
+    now: Date = new Date()
+  ): WLPeriodHabitMetrics {
+    const range = this.getPeriodDateRange(period, now);
+
+    // 1. Calories & Protein: Filter meal entries strictly within the local calendar date range
+    const periodMeals = meals.filter((m) => {
+      const dStr = getLocalDateString(m.loggedAt);
+      return dStr >= range.startDateStr && dStr <= range.endDateStr;
+    });
+
+    const totalCalories = periodMeals.reduce((acc, m) => acc + Math.max(0, Number(m.calories) || 0), 0);
+    const totalProtein = periodMeals.reduce((acc, m) => acc + Math.max(0, Number(m.proteinG) || 0), 0);
+
+    const avgCalories = range.dayCount > 0 ? Math.round(totalCalories / range.dayCount) : 0;
+    const avgProtein = range.dayCount > 0 ? Math.round(totalProtein / range.dayCount) : 0;
+
+    // 2. Water: Filter water records within the range & sum per local calendar day
+    const periodWater = water.filter((w) => {
+      const dStr = getLocalDateString(w.loggedAt);
+      return dStr >= range.startDateStr && dStr <= range.endDateStr;
+    });
+
+    const dailyWaterMap = new Map<string, number>();
+    for (const w of periodWater) {
+      const dStr = getLocalDateString(w.loggedAt);
+      dailyWaterMap.set(dStr, (dailyWaterMap.get(dStr) || 0) + Math.max(0, Number(w.amountL) || 0));
+    }
+
+    let totalWaterL = 0;
+    for (const amount of dailyWaterMap.values()) {
+      totalWaterL += amount;
+    }
+    const avgWater = range.dayCount > 0 ? parseFloat((totalWaterL / range.dayCount).toFixed(1)) : 0;
+
+    // 3. Steps: Filter activity records within range & sum per local calendar day
+    const periodActivities = activities.filter((a) => {
+      const dStr = getLocalDateString(a.activityDate || a.loggedAt);
+      return dStr >= range.startDateStr && dStr <= range.endDateStr;
+    });
+
+    const dailyStepsMap = new Map<string, number>();
+    for (const a of periodActivities) {
+      const dStr = getLocalDateString(a.activityDate || a.loggedAt);
+      dailyStepsMap.set(dStr, (dailyStepsMap.get(dStr) || 0) + Math.max(0, Number(a.steps) || 0));
+    }
+
+    let totalSteps = 0;
+    for (const steps of dailyStepsMap.values()) {
+      totalSteps += steps;
+    }
+    const avgSteps = range.dayCount > 0 ? Math.round(totalSteps / range.dayCount) : 0;
+
+    return {
+      avgCalories,
+      avgProtein,
+      avgWater,
+      avgSteps,
+      totalCalories,
+      totalProtein,
+      totalWaterL,
+      totalSteps,
+      range,
+    };
+  }
 }
+

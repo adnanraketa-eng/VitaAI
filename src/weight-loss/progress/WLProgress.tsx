@@ -4,8 +4,15 @@ import {
   Flame, Award, Droplets, Footprints, Leaf, X, Trophy, Zap, Scale, Plus
 } from 'lucide-react';
 import { BottomTab, UserSharedProfile, WeightLossSettings } from '../../types';
-import { WLRepository } from '../data/WLRepository';
-import { WLWeightRecord, WLMealEntry, WLWaterRecord, WLActivityRecord, WLDailyNutritionSummary } from '../data/WLTypes';
+import { WLRepository, getLocalDateString } from '../data/WLRepository';
+import { 
+  WLWeightRecord, 
+  WLMealEntry, 
+  WLWaterRecord, 
+  WLActivityRecord, 
+  WLDailyNutritionSummary,
+  WLProgressPeriod,
+} from '../data/WLTypes';
 import { WLWeight } from '../weight/WLWeight';
 
 interface Props {
@@ -15,10 +22,8 @@ interface Props {
   onUpdateSettings?: (settings: WeightLossSettings) => void;
 }
 
-type PeriodFilter = 'week' | '30d' | '90d';
-
 export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: Props) {
-  const [period, setPeriod] = useState<PeriodFilter>('week');
+  const [period, setPeriod] = useState<WLProgressPeriod>('week');
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
@@ -121,56 +126,21 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   const ringOffset = ringCircumference - (ringCircumference * progressPercent) / 100;
 
   // Real period data calculated dynamically from existing repository records
-  const periodDays = period === 'week' ? 7 : period === '30d' ? 30 : 90;
+  const habitMetrics = useMemo(() => {
+    return WLRepository.calculatePeriodHabits(period, mealEntries, waterRecords, activityRecords);
+  }, [period, mealEntries, waterRecords, activityRecords]);
 
-  const periodData = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date();
-    cutoff.setDate(now.getDate() - periodDays);
-
-    const pMeals = mealEntries.filter((m) => new Date(m.loggedAt) >= cutoff);
-    const pWater = waterRecords.filter((w) => new Date(w.loggedAt) >= cutoff);
-    const pActivity = activityRecords.filter((a) => new Date(a.loggedAt) >= cutoff);
-
-    const mealDays = new Set(pMeals.map((m) => new Date(m.loggedAt).toDateString())).size || 1;
-    const waterDays = new Set(pWater.map((w) => new Date(w.loggedAt).toDateString())).size || 1;
-    const actDays = new Set(pActivity.map((a) => new Date(a.loggedAt).toDateString())).size || 1;
-
-    const avgCal = pMeals.length > 0 
-      ? Math.round(pMeals.reduce((acc, m) => acc + (m.calories || 0), 0) / mealDays)
-      : 0;
-    const avgProt = pMeals.length > 0
-      ? Math.round(pMeals.reduce((acc, m) => acc + (m.proteinG || 0), 0) / mealDays)
-      : 0;
-    const avgWat = pWater.length > 0
-      ? parseFloat((pWater.reduce((acc, w) => acc + (w.amountL || 0), 0) / waterDays).toFixed(1))
-      : 0;
-    const avgStp = pActivity.length > 0
-      ? Math.round(pActivity.reduce((acc, a) => acc + (a.steps || 0), 0) / actDays)
-      : 0;
-
-    return { avgCal, avgProt, avgWat, avgStp };
-  }, [mealEntries, waterRecords, activityRecords, periodDays]);
-
-  // Selected period values (uses period-specific data, falling back to today's logged data if empty)
-  const caloriesVal = periodData.avgCal > 0 
-    ? periodData.avgCal 
-    : (todayNutrition.calories > 0 ? todayNutrition.calories : 0);
+  // Selected period values (uses period-specific data directly from habitMetrics)
+  const caloriesVal = habitMetrics.avgCalories;
   const caloriesTarget = settings.dailyCalorieGoalKcal || 1850;
 
-  const proteinVal = periodData.avgProt > 0 
-    ? periodData.avgProt 
-    : (todayNutrition.proteinG > 0 ? todayNutrition.proteinG : 0);
+  const proteinVal = habitMetrics.avgProtein;
   const proteinTarget = settings.dailyProteinGoalG || 105;
 
-  const waterVal = periodData.avgWat > 0 
-    ? periodData.avgWat 
-    : (todayWater > 0 ? todayWater : 0);
+  const waterVal = habitMetrics.avgWater;
   const waterTarget = settings.dailyWaterGoalL || 2.4;
 
-  const stepsVal = periodData.avgStp > 0 
-    ? periodData.avgStp 
-    : (todayAct.steps > 0 ? todayAct.steps : 0);
+  const stepsVal = habitMetrics.avgSteps;
   const stepsTarget = settings.dailyStepGoal || 9000;
   const stepsTargetLabel = stepsTarget >= 1000 ? `${(stepsTarget / 1000).toFixed(0)}k` : `${stepsTarget}`;
 
@@ -219,10 +189,10 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
   // Dynamic streak calculation from consecutive days with logged activity/meals/weight
   const realStreakDays = useMemo(() => {
     const loggedDates = new Set<string>();
-    mealEntries.forEach((m) => loggedDates.add(new Date(m.loggedAt).toISOString().split('T')[0]));
-    waterRecords.forEach((w) => loggedDates.add(new Date(w.loggedAt).toISOString().split('T')[0]));
-    activityRecords.forEach((a) => loggedDates.add(new Date(a.loggedAt).toISOString().split('T')[0]));
-    weightRecords.forEach((w) => loggedDates.add(new Date(w.recordedAt).toISOString().split('T')[0]));
+    mealEntries.forEach((m) => loggedDates.add(getLocalDateString(m.loggedAt)));
+    waterRecords.forEach((w) => loggedDates.add(getLocalDateString(w.loggedAt)));
+    activityRecords.forEach((a) => loggedDates.add(getLocalDateString(a.activityDate || a.loggedAt)));
+    weightRecords.forEach((w) => loggedDates.add(getLocalDateString(w.recordedAt)));
 
     if (loggedDates.size === 0) {
       return profile.streakDays > 0 ? profile.streakDays : 0;
@@ -231,13 +201,13 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     let streak = 0;
     const checkDate = new Date();
     // Check if today is logged; if not, allow streak to continue from yesterday
-    const todayStr = checkDate.toISOString().split('T')[0];
+    const todayStr = getLocalDateString(checkDate);
     if (!loggedDates.has(todayStr)) {
       checkDate.setDate(checkDate.getDate() - 1);
     }
 
     while (true) {
-      const dStr = checkDate.toISOString().split('T')[0];
+      const dStr = getLocalDateString(checkDate);
       if (loggedDates.has(dStr)) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);
@@ -248,6 +218,38 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
 
     return Math.max(streak, profile.streakDays > 0 ? profile.streakDays : 0);
   }, [mealEntries, waterRecords, activityRecords, weightRecords, profile.streakDays]);
+
+  // Achievement checks based on user's authentic history
+  const hasReached2LWater = useMemo(() => {
+    if (todayWater >= 2.0) return true;
+    const dailyWaterMap = new Map<string, number>();
+    for (const w of waterRecords) {
+      const d = getLocalDateString(w.loggedAt);
+      dailyWaterMap.set(d, (dailyWaterMap.get(d) || 0) + (Number(w.amountL) || 0));
+    }
+    for (const amt of dailyWaterMap.values()) {
+      if (amt >= 2.0) return true;
+    }
+    return false;
+  }, [todayWater, waterRecords]);
+
+  const hasReached80gProtein = useMemo(() => {
+    if (todayNutrition.proteinG >= 80) return true;
+    const dailyProteinMap = new Map<string, number>();
+    for (const m of mealEntries) {
+      const d = getLocalDateString(m.loggedAt);
+      dailyProteinMap.set(d, (dailyProteinMap.get(d) || 0) + (Number(m.proteinG) || 0));
+    }
+    for (const amt of dailyProteinMap.values()) {
+      if (amt >= 80) return true;
+    }
+    return false;
+  }, [todayNutrition.proteinG, mealEntries]);
+
+  const hasReached7kSteps = useMemo(() => {
+    if (todayAct.steps >= 7000) return true;
+    return activityRecords.some((a) => (Number(a.steps) || 0) >= 7000);
+  }, [todayAct.steps, activityRecords]);
 
   // Real achievements list based on the user's authentic data
   const achievementsList = useMemo(() => [
@@ -290,34 +292,34 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     {
       id: 'hydration_hero',
       title: 'Hydration Hero',
-      subtitle: waterVal >= 2.0 
-        ? `Logged ${waterVal.toFixed(1)}L water` 
+      subtitle: hasReached2LWater 
+        ? 'Reached 2.0L+ water in a day' 
         : 'Reach 2.0L water in a day',
       icon: <Droplets className="w-5 h-5 text-[#3E8FB0]" />,
       bg: 'bg-[#E8F4F8]',
-      unlocked: waterVal >= 2.0,
+      unlocked: hasReached2LWater,
     },
     {
       id: 'protein_champion',
       title: 'Protein Champion',
-      subtitle: proteinVal >= 80 
-        ? `Reached ${proteinVal}g protein` 
+      subtitle: hasReached80gProtein 
+        ? 'Reached 80g+ protein in a day' 
         : 'Reach 80g+ protein in a day',
       icon: <Leaf className="w-5 h-5 text-[#1F7A5C]" />,
       bg: 'bg-[#E8F5EE]',
-      unlocked: proteinVal >= 80,
+      unlocked: hasReached80gProtein,
     },
     {
       id: 'step_master',
       title: 'Active Mover',
-      subtitle: stepsVal >= 7000 
-        ? `Achieved ${stepsVal.toLocaleString()} steps` 
+      subtitle: hasReached7kSteps 
+        ? 'Achieved 7,000+ steps in a day' 
         : 'Reach 7,000+ steps in a day',
       icon: <Footprints className="w-5 h-5 text-[#2E8B8B]" />,
       bg: 'bg-[#E6F4F1]',
-      unlocked: stepsVal >= 7000,
+      unlocked: hasReached7kSteps,
     },
-  ], [realStreakDays, lostSoFar, mealEntries.length, weightRecords.length, waterVal, proteinVal, stepsVal]);
+  ], [realStreakDays, lostSoFar, mealEntries.length, weightRecords.length, hasReached2LWater, hasReached80gProtein, hasReached7kSteps]);
 
   // Unlocked achievements count and preview
   const earnedAchievements = useMemo(() => {
