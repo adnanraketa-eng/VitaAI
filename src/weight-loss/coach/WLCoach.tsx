@@ -27,8 +27,79 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyLoadError, setHistoryLoadError] = useState<string | null>(null);
+  const [failedQuery, setFailedQuery] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isSendingRef = useRef(false);
+
+  const getFriendlyErrorMessage = (err: unknown): string => {
+    // 1. Check navigator online state or explicit network error strings
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return "You’re offline or your connection is unstable. Check your internet and try again.";
+    }
+
+    let status: number | null = null;
+    let message = '';
+
+    if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      if (typeof e.status === 'number') {
+        status = e.status;
+      } else if (typeof e.statusCode === 'number') {
+        status = e.statusCode;
+      }
+
+      if (typeof e.message === 'string') {
+        message = e.message;
+      }
+
+      // Check nested context/response error if returned by Supabase functions client
+      if (e.context && typeof e.context === 'object') {
+        const ctx = e.context as Record<string, unknown>;
+        if (typeof ctx.status === 'number') {
+          status = ctx.status;
+        }
+      }
+    } else if (typeof err === 'string') {
+      message = err;
+    }
+
+    // 2. Check for rate limit (HTTP 429)
+    if (status === 429 || /429|rate\s*limit|too\s*many\s*requests/i.test(message)) {
+      return "The AI Coach is receiving too many requests right now. Please wait a moment and try again.";
+    }
+
+    // 3. Check for auth/session expiration (HTTP 401 or 403)
+    if (
+      status === 401 ||
+      status === 403 ||
+      /401|403|unauthorized|jwt|session\s*expired|token\s*expired/i.test(message)
+    ) {
+      return "Your session has expired. Please sign in again.";
+    }
+
+    // 4. Check for network / fetch failure
+    if (
+      status === 0 ||
+      /failed to fetch|network\s*error|networkrequestfailed|fetch\s*failed|connection\s*refused|offline/i.test(
+        message
+      )
+    ) {
+      return "You’re offline or your connection is unstable. Check your internet and try again.";
+    }
+
+    // 5. Check for server errors (HTTP 5xx)
+    if (
+      (status !== null && status >= 500 && status <= 599) ||
+      /500|502|503|504|internal\s*server|bad\s*gateway|service\s*unavailable|gateway\s*timeout/i.test(
+        message
+      )
+    ) {
+      return "The AI Coach is temporarily unavailable. Please try again shortly.";
+    }
+
+    // 6. Default friendly fallback
+    return "We couldn’t send your message. Please try again.";
+  };
 
   useEffect(() => {
     let active = true;
@@ -42,9 +113,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
       .catch((err) => {
         console.warn('WLCoach load messages error:', err);
         if (active) {
-          setHistoryLoadError(
-            err instanceof Error ? err.message : 'Unable to load chat history from database.'
-          );
+          setHistoryLoadError('We couldn’t load your previous conversation history.');
         }
       });
     return () => {
@@ -69,6 +138,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
 
     isSendingRef.current = true;
     setErrorMessage(null);
+    setFailedQuery(null);
     let userMsg: WLCoachMessage | null = null;
 
     try {
@@ -76,9 +146,9 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
       try {
         userMsg = await WLRepository.addCoachMessage('user', query.trim(), 'weight_loss_default');
       } catch (dbErr: unknown) {
-        console.error('WLCoach user message persistence error:', dbErr instanceof Error ? dbErr.message : 'Database error');
-        const dbMsg = dbErr instanceof Error ? dbErr.message : 'Database error';
-        setErrorMessage(`Message could not be saved to your account history (${dbMsg}).`);
+        console.warn('WLCoach user message persistence error:', dbErr);
+        setFailedQuery(query.trim());
+        setErrorMessage(getFriendlyErrorMessage(dbErr));
         return;
       }
 
@@ -109,7 +179,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
       });
 
       if (error) {
-        throw new Error(error.message || 'Unable to connect to the AI coach service.');
+        throw error;
       }
 
       // 4. Handle response { success, reply, contextLoaded }
@@ -121,7 +191,8 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
             return [...prev, aiMsg];
           });
         } catch (saveAiErr: unknown) {
-          console.error('WLCoach AI reply persistence error:', saveAiErr instanceof Error ? saveAiErr.message : 'Database save error');
+          console.warn('WLCoach AI reply persistence error:', saveAiErr);
+          // If the AI replied successfully, display it even if history persistence failed
           setErrorMessage('Coach responded, but the reply could not be saved to your chat history.');
         }
       } else if (data && data.error) {
@@ -130,12 +201,21 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
         throw new Error('AI coach did not return a response. Please try again.');
       }
     } catch (err: unknown) {
-      console.warn('WLCoach AI service error:', err instanceof Error ? err.message : 'Unknown error');
-      const errText = err instanceof Error ? err.message : 'Unable to connect to AI Coach. Please check your connection and try again.';
-      setErrorMessage(errText);
+      console.warn('WLCoach AI service invocation error:', err);
+      setFailedQuery(query.trim());
+      setErrorMessage(getFriendlyErrorMessage(err));
     } finally {
       setIsLoading(false);
       isSendingRef.current = false;
+    }
+  };
+
+  const handleRetry = () => {
+    if (failedQuery && !isLoading) {
+      const toRetry = failedQuery;
+      setFailedQuery(null);
+      setErrorMessage(null);
+      handleSendMessage(toRetry);
     }
   };
 
@@ -144,6 +224,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
       await WLRepository.clearCoachMessages('weight_loss_default');
       setErrorMessage(null);
       setHistoryLoadError(null);
+      setFailedQuery(null);
       setMessages([
         {
           id: `fresh_${Date.now()}`,
@@ -154,9 +235,7 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
       ]);
     } catch (err) {
       console.warn('Clear coach history failed:', err);
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Could not clear chat history from database.'
-      );
+      setErrorMessage('We couldn’t clear your conversation history. Please try again.');
     }
   };
 
@@ -259,10 +338,18 @@ export function WLCoach({ profile, settings, onNavigate }: Props) {
           <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-[#FFF4F2] border border-[#FCDAD7] text-xs text-[#C53030]">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#E53E3E]" />
             <div className="flex-1">
-              <span className="font-semibold block text-[11px]">
-                {errorMessage.includes('could not be saved') ? 'Storage Notice' : 'Could not get reply'}
-              </span>
+              <span className="font-semibold block text-[11px]">Notice</span>
               <p className="mt-0.5 text-[11px] leading-relaxed text-[#9B2C2C]">{errorMessage}</p>
+              {failedQuery && !isLoading && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E53E3E] text-white text-[11px] font-semibold hover:bg-[#C53030] transition-colors shadow-2xs"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Try again
+                </button>
+              )}
             </div>
           </div>
         )}
