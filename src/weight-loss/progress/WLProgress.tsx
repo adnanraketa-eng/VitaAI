@@ -72,24 +72,29 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     loadProgressData();
   }, [settings.dailyCalorieGoalKcal]);
 
-  const currentWeight = weightRecords[0]?.weightLb || settings.currentWeightLb || 159.6;
+  const currentWeight = weightRecords[0]?.weightLb || settings.currentWeightLb || 0;
   const earliestRecord = weightRecords[weightRecords.length - 1];
-  const startWeight = settings.startWeightLb || earliestRecord?.weightLb || 179.7;
-  const goalWeight = settings.goalWeightLb || 147.3;
+  const startWeight = settings.startWeightLb || earliestRecord?.weightLb || currentWeight;
+  const goalWeight = settings.goalWeightLb || 0;
 
   const startDateStr = earliestRecord 
     ? new Date(earliestRecord.recordedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    : '12 Jan 2025';
+    : (profile.memberSince && profile.memberSince !== 'Today' 
+        ? profile.memberSince 
+        : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
 
   const totalToLose = Math.max(0, startWeight - goalWeight);
   const lostSoFar = Math.max(0, startWeight - currentWeight);
   const remaining = Math.max(0, currentWeight - goalWeight);
   const progressPercent = totalToLose > 0 
     ? Math.min(100, Math.max(0, Math.round((lostSoFar / totalToLose) * 100))) 
-    : 0;
+    : (goalWeight > 0 && currentWeight <= goalWeight ? 100 : 0);
 
   // Dynamic estimated completion date & target month from real target pace and weight remaining
   const { estCompletionStr, targetMonthStr } = useMemo(() => {
+    if (goalWeight <= 0) {
+      return { estCompletionStr: 'Set a goal', targetMonthStr: 'Goal in progress' };
+    }
     if (currentWeight <= goalWeight) {
       return { estCompletionStr: 'Achieved!', targetMonthStr: 'Goal achieved' };
     }
@@ -147,25 +152,25 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     return { avgCal, avgProt, avgWat, avgStp };
   }, [mealEntries, waterRecords, activityRecords, periodDays]);
 
-  // Selected period values (uses period-specific data, falling back to today or defaults if empty)
+  // Selected period values (uses period-specific data, falling back to today's logged data if empty)
   const caloriesVal = periodData.avgCal > 0 
     ? periodData.avgCal 
-    : (todayNutrition.calories > 0 ? todayNutrition.calories : 1620);
+    : (todayNutrition.calories > 0 ? todayNutrition.calories : 0);
   const caloriesTarget = settings.dailyCalorieGoalKcal || 1850;
 
   const proteinVal = periodData.avgProt > 0 
     ? periodData.avgProt 
-    : (todayNutrition.proteinG > 0 ? todayNutrition.proteinG : 86);
+    : (todayNutrition.proteinG > 0 ? todayNutrition.proteinG : 0);
   const proteinTarget = settings.dailyProteinGoalG || 105;
 
   const waterVal = periodData.avgWat > 0 
     ? periodData.avgWat 
-    : (todayWater > 0 ? todayWater : 1.8);
+    : (todayWater > 0 ? todayWater : 0);
   const waterTarget = settings.dailyWaterGoalL || 2.4;
 
   const stepsVal = periodData.avgStp > 0 
     ? periodData.avgStp 
-    : (todayAct.steps > 0 ? todayAct.steps : 7432);
+    : (todayAct.steps > 0 ? todayAct.steps : 0);
   const stepsTarget = settings.dailyStepGoal || 9000;
   const stepsTargetLabel = stepsTarget >= 1000 ? `${(stepsTarget / 1000).toFixed(0)}k` : `${stepsTarget}`;
 
@@ -180,28 +185,114 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
       ? "Consistency over 30 days" 
       : "Long-term momentum";
 
-  // Achievements list for "See all" functionality
+  // Dynamic milestone derived from user's actual progress
+  const intermediateMilestone = useMemo(() => {
+    // If user has a totalToLose >= 2, target a sensible milestone (halfway or 5 lb / 10 lb)
+    const targetLb = totalToLose > 0 
+      ? (totalToLose >= 10 ? 5 : Math.max(1, Math.round(totalToLose / 2)))
+      : 5;
+    const isCompleted = lostSoFar >= targetLb;
+
+    // Find if a real weight record satisfied this milestone
+    let completedDateStr: string | null = null;
+    if (isCompleted && weightRecords.length > 0 && startWeight > 0) {
+      // Find the first record that dropped by at least targetLb from startWeight
+      const chronological = [...weightRecords].reverse();
+      const reachedRec = chronological.find((r) => startWeight - r.weightLb >= targetLb);
+      if (reachedRec) {
+        completedDateStr = new Date(reachedRec.recordedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      } else if (weightRecords[0]) {
+        completedDateStr = new Date(weightRecords[0].recordedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    }
+
+    return {
+      targetLb,
+      title: `First ${targetLb} lb down`,
+      subtitle: isCompleted
+        ? `${completedDateStr || 'Recently'} · Completed`
+        : `${(targetLb - lostSoFar).toFixed(1)} lb to go · In progress`,
+      isCompleted,
+    };
+  }, [totalToLose, lostSoFar, weightRecords, startWeight]);
+
+  // Dynamic streak calculation from consecutive days with logged activity/meals/weight
+  const realStreakDays = useMemo(() => {
+    const loggedDates = new Set<string>();
+    mealEntries.forEach((m) => loggedDates.add(new Date(m.loggedAt).toISOString().split('T')[0]));
+    waterRecords.forEach((w) => loggedDates.add(new Date(w.loggedAt).toISOString().split('T')[0]));
+    activityRecords.forEach((a) => loggedDates.add(new Date(a.loggedAt).toISOString().split('T')[0]));
+    weightRecords.forEach((w) => loggedDates.add(new Date(w.recordedAt).toISOString().split('T')[0]));
+
+    if (loggedDates.size === 0) {
+      return profile.streakDays > 0 ? profile.streakDays : 0;
+    }
+
+    let streak = 0;
+    const checkDate = new Date();
+    // Check if today is logged; if not, allow streak to continue from yesterday
+    const todayStr = checkDate.toISOString().split('T')[0];
+    if (!loggedDates.has(todayStr)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    while (true) {
+      const dStr = checkDate.toISOString().split('T')[0];
+      if (loggedDates.has(dStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return Math.max(streak, profile.streakDays > 0 ? profile.streakDays : 0);
+  }, [mealEntries, waterRecords, activityRecords, weightRecords, profile.streakDays]);
+
+  // Real achievements list based on the user's authentic data
   const achievementsList = useMemo(() => [
     {
-      id: 'streak_7',
-      title: '7 day streak',
-      subtitle: 'Unlocked today',
+      id: 'streak_achievement',
+      title: realStreakDays >= 7 
+        ? `${realStreakDays} day streak` 
+        : realStreakDays >= 3 
+          ? `${realStreakDays} day streak` 
+          : '3 day streak',
+      subtitle: realStreakDays >= 3 
+        ? `${realStreakDays} consecutive days logged` 
+        : 'Log 3 consecutive days to unlock',
       icon: <Flame className="w-5 h-5 text-[#FF7A50] fill-[#FF7A50]" />,
       bg: 'bg-[#FEF0EA]',
-      unlocked: true,
+      unlocked: realStreakDays >= 3,
     },
     {
       id: 'weight_milestone',
-      title: lostSoFar > 0 ? `${lostSoFar.toFixed(0)} lb lost` : '11 lb lost',
-      subtitle: 'A milestone worth celebrating',
+      title: lostSoFar >= 1 
+        ? `${Math.round(lostSoFar)} lb lost` 
+        : 'First pound lost',
+      subtitle: lostSoFar >= 1 
+        ? 'A milestone worth celebrating' 
+        : 'Log weight to track your progress',
       icon: <Award className="w-5 h-5 text-[#1F7A5C]" />,
       bg: 'bg-[#E8F5EE]',
-      unlocked: true,
+      unlocked: lostSoFar >= 1,
+    },
+    {
+      id: 'first_log',
+      title: 'First Step',
+      subtitle: mealEntries.length > 0 || weightRecords.length > 0
+        ? 'Started your wellness journey'
+        : 'Log your first meal or weight',
+      icon: <Zap className="w-5 h-5 text-[#1F7A5C]" />,
+      bg: 'bg-[#E8F5EE]',
+      unlocked: mealEntries.length > 0 || weightRecords.length > 0,
     },
     {
       id: 'hydration_hero',
       title: 'Hydration Hero',
-      subtitle: 'Logged 2.0L+ water',
+      subtitle: waterVal >= 2.0 
+        ? `Logged ${waterVal.toFixed(1)}L water` 
+        : 'Reach 2.0L water in a day',
       icon: <Droplets className="w-5 h-5 text-[#3E8FB0]" />,
       bg: 'bg-[#E8F4F8]',
       unlocked: waterVal >= 2.0,
@@ -209,7 +300,9 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     {
       id: 'protein_champion',
       title: 'Protein Champion',
-      subtitle: 'Reached 80g+ protein',
+      subtitle: proteinVal >= 80 
+        ? `Reached ${proteinVal}g protein` 
+        : 'Reach 80g+ protein in a day',
       icon: <Leaf className="w-5 h-5 text-[#1F7A5C]" />,
       bg: 'bg-[#E8F5EE]',
       unlocked: proteinVal >= 80,
@@ -217,12 +310,19 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
     {
       id: 'step_master',
       title: 'Active Mover',
-      subtitle: 'Achieved 7,000+ steps',
+      subtitle: stepsVal >= 7000 
+        ? `Achieved ${stepsVal.toLocaleString()} steps` 
+        : 'Reach 7,000+ steps in a day',
       icon: <Footprints className="w-5 h-5 text-[#2E8B8B]" />,
       bg: 'bg-[#E6F4F1]',
       unlocked: stepsVal >= 7000,
     },
-  ], [lostSoFar, waterVal, proteinVal, stepsVal]);
+  ], [realStreakDays, lostSoFar, mealEntries.length, weightRecords.length, waterVal, proteinVal, stepsVal]);
+
+  // Unlocked achievements count and preview
+  const earnedAchievements = useMemo(() => {
+    return achievementsList.filter((a) => a.unlocked);
+  }, [achievementsList]);
 
   return (
     <div className="min-h-screen bg-[#F6FAF7] text-[#1B2B24] pb-36 font-sans selection:bg-[#1F7A5C] selection:text-white">
@@ -304,7 +404,13 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
             <div>
               <span className="text-xs text-white/80 block font-medium">Current weight</span>
               <div className="text-3xl font-extrabold text-white tracking-tight mt-0.5">
-                {currentWeight} <span className="text-lg font-bold text-white/90">lb</span>
+                {currentWeight > 0 ? (
+                  <>
+                    {currentWeight} <span className="text-lg font-bold text-white/90">lb</span>
+                  </>
+                ) : (
+                  <span className="text-xl font-bold text-white/90">Not recorded</span>
+                )}
               </div>
             </div>
 
@@ -350,7 +456,9 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
           <div className="border-t border-white/20 pt-3.5 grid grid-cols-3 gap-2">
             <div>
               <span className="text-[11px] text-white/75 block font-medium">Target</span>
-              <span className="text-sm font-bold text-white mt-0.5 block">{goalWeight} lb</span>
+              <span className="text-sm font-bold text-white mt-0.5 block">
+                {goalWeight > 0 ? `${goalWeight} lb` : '—'}
+              </span>
             </div>
             <div>
               <span className="text-[11px] text-white/75 block font-medium">Lost</span>
@@ -358,7 +466,9 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
             </div>
             <div>
               <span className="text-[11px] text-white/75 block font-medium">Remaining</span>
-              <span className="text-sm font-bold text-white mt-0.5 block">{remaining.toFixed(1)} lb</span>
+              <span className="text-sm font-bold text-white mt-0.5 block">
+                {goalWeight > 0 ? `${remaining.toFixed(1)} lb` : '—'}
+              </span>
             </div>
           </div>
         </section>
@@ -404,23 +514,29 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
               </div>
               <div className="pt-0.5">
                 <div className="text-sm font-bold text-[#1B2B24]">Start journey</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">{startDateStr} · {startWeight} lb</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">
+                  {startDateStr}{startWeight > 0 ? ` · ${startWeight} lb` : ''}
+                </div>
               </div>
             </div>
 
-            {/* Milestone 2: First 11 lb down */}
+            {/* Milestone 2: Intermediate Progress */}
             <div className="flex items-start gap-4">
               <div className="flex flex-col items-center">
-                <div className="w-7 h-7 rounded-full bg-[#E8F5EE] text-[#1F7A5C] flex items-center justify-center shrink-0">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                  intermediateMilestone.isCompleted 
+                    ? 'bg-[#E8F5EE] text-[#1F7A5C]' 
+                    : 'bg-[#F0F3F1] text-[#8A9A92]'
+                }`}>
                   <Check className="w-4 h-4 stroke-[3]" />
                 </div>
                 <div className="w-0.5 bg-[#DCE6E0] h-9 my-1" />
               </div>
               <div className="pt-0.5">
                 <div className="text-sm font-bold text-[#1B2B24]">
-                  {lostSoFar >= 5 ? `First ${Math.round(lostSoFar)} lb down` : 'First 11 lb down'}
+                  {intermediateMilestone.title}
                 </div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">20 Feb 2025 · Completed</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">{intermediateMilestone.subtitle}</div>
               </div>
             </div>
 
@@ -434,20 +550,28 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
               </div>
               <div className="pt-0.5">
                 <div className="text-sm font-bold text-[#1B2B24]">Current position</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">{currentWeight} lb · Keep your rhythm</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">
+                  {currentWeight > 0 ? `${currentWeight} lb` : 'Not recorded'} · Keep your rhythm
+                </div>
               </div>
             </div>
 
             {/* Milestone 4: Goal achieved */}
             <div className="flex items-start gap-4">
               <div className="flex flex-col items-center">
-                <div className="w-7 h-7 rounded-full bg-[#F0F3F1] text-[#8A9A92] flex items-center justify-center shrink-0">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                  goalWeight > 0 && currentWeight <= goalWeight 
+                    ? 'bg-[#E8F5EE] text-[#1F7A5C]' 
+                    : 'bg-[#F0F3F1] text-[#8A9A92]'
+                }`}>
                   <Flag className="w-4 h-4 fill-current" />
                 </div>
               </div>
               <div className="pt-0.5">
                 <div className="text-sm font-bold text-[#8A9A92]">Goal achieved</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">{goalWeight} lb · {estCompletionStr}</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">
+                  {goalWeight > 0 ? `${goalWeight} lb` : 'Set a goal'} · {estCompletionStr}
+                </div>
               </div>
             </div>
           </div>
@@ -460,7 +584,9 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
               ACHIEVEMENTS
             </span>
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-[#1B2B24]">You earned these</h2>
+              <h2 className="text-xl font-bold text-[#1B2B24]">
+                {earnedAchievements.length > 0 ? 'You earned these' : 'Available milestones'}
+              </h2>
               <button 
                 type="button" 
                 onClick={() => setShowAllAchievements(true)}
@@ -472,29 +598,24 @@ export function WLProgress({ profile, settings, onNavigate, onUpdateSettings }: 
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
-            {/* 7 day streak */}
-            <div className="min-w-[190px] flex-1 bg-white rounded-3xl border border-[#DCE6E0] p-4.5 shadow-2xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-[#FEF0EA] flex items-center justify-center shrink-0">
-                <Flame className="w-5 h-5 text-[#FF7A50] fill-[#FF7A50]" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-[#1B2B24]">7 day streak</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">Unlocked today</div>
-              </div>
-            </div>
-
-            {/* 11 lb lost */}
-            <div className="min-w-[190px] flex-1 bg-white rounded-3xl border border-[#DCE6E0] p-4.5 shadow-2xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-[#E8F5EE] flex items-center justify-center shrink-0">
-                <Award className="w-5 h-5 text-[#1F7A5C]" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-[#1B2B24]">
-                  {lostSoFar > 0 ? `${lostSoFar.toFixed(0)} lb lost` : '11 lb lost'}
+            {achievementsList.slice(0, 2).map((ach) => (
+              <div 
+                key={ach.id} 
+                className={`min-w-[190px] flex-1 rounded-3xl border p-4.5 shadow-2xs flex items-center gap-3.5 transition-colors ${
+                  ach.unlocked 
+                    ? 'bg-white border-[#DCE6E0]' 
+                    : 'bg-white/80 border-[#DCE6E0]/70 opacity-80'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full ${ach.bg} flex items-center justify-center shrink-0`}>
+                  {ach.icon}
                 </div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">A milestone worth celebrating</div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#1B2B24] truncate">{ach.title}</div>
+                  <div className="text-xs text-[#8A9A92] mt-0.5 truncate">{ach.subtitle}</div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </section>
 
