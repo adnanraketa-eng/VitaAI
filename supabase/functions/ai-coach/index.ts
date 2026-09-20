@@ -267,7 +267,24 @@ Coaching Guidelines:
     });
 
     if (!geminiRes.ok) {
-      console.error("Gemini API call failed with status:", geminiRes.status);
+      let sanitizedProviderDetails = "No error body returned";
+      try {
+        const errorBodyText = await geminiRes.text();
+        try {
+          const parsed = JSON.parse(errorBodyText);
+          const errObj = parsed.error || parsed;
+          sanitizedProviderDetails = `code: ${errObj.code ?? "N/A"}, status: ${errObj.status ?? "N/A"}, message: ${errObj.message ?? "Unknown error"}`;
+        } catch {
+          sanitizedProviderDetails = errorBodyText.slice(0, 300);
+        }
+      } catch (readErr: unknown) {
+        sanitizedProviderDetails = `Failed to read error body: ${readErr instanceof Error ? readErr.message : String(readErr)}`;
+      }
+
+      console.error(
+        `[ai-coach] Gemini API non-2xx response: status=${geminiRes.status} details=${sanitizedProviderDetails}`
+      );
+
       return new Response(
         JSON.stringify({ error: "Failed to generate AI response. Please try again." }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -71,6 +71,9 @@ export interface WLCoachMessage {
   sender: 'ai' | 'user';
   text: string;
   timestamp: string;
+  userId?: string;
+  conversationId?: string;
+  createdAt?: string;
 }
 
 export interface WLDailyNutritionSummary {

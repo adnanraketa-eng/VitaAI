@@ -717,23 +717,133 @@ export class WLRepository {
 
   /* ================= COACH MESSAGES ================= */
 
-  static async getCoachMessages(): Promise<WLCoachMessage[]> {
-    return [...coachMessagesStore];
+  static async getCoachMessages(conversationId?: string): Promise<WLCoachMessage[]> {
+    try {
+      const user = await requireAuthUser();
+      let query = supabase
+        .from('ai_coach_messages')
+        .select('id, user_id, conversation_id, role, content, created_at')
+        .eq('user_id', user.id);
+
+      if (conversationId) {
+        query = query.eq('conversation_id', conversationId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: true });
+
+      if (error) {
+        // If table does not exist in schema cache or permissions not yet run, bubble or fallback gracefully
+        console.warn('WLRepository.getCoachMessages Supabase query warning:', error.message || error);
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const persistedMessages: WLCoachMessage[] = data.map((row) => {
+          const createdAtDate = row.created_at ? new Date(row.created_at) : new Date();
+          return {
+            id: String(row.id),
+            sender: row.role === 'assistant' || row.role === 'ai' ? 'ai' : 'user',
+            text: row.content || '',
+            timestamp: !isNaN(createdAtDate.getTime())
+              ? createdAtDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            userId: row.user_id,
+            conversationId: row.conversation_id,
+            createdAt: row.created_at,
+          };
+        });
+        // Update in-memory store for instantaneous returns
+        coachMessagesStore = persistedMessages;
+        return persistedMessages;
+      }
+
+      return [...coachMessagesStore];
+    } catch (err) {
+      console.warn('WLRepository.getCoachMessages fetch failed, returning in-memory store:', err);
+      // If network or table is missing, preserve memory and rethrow if caller handles or return memory
+      if (coachMessagesStore.length > 0) {
+        return [...coachMessagesStore];
+      }
+      throw err;
+    }
   }
 
-  static async addCoachMessage(sender: 'ai' | 'user', text: string): Promise<WLCoachMessage> {
+  static async addCoachMessage(
+    sender: 'ai' | 'user',
+    text: string,
+    conversationId: string = 'weight_loss_default'
+  ): Promise<WLCoachMessage> {
+    const clientGeneratedId = `wl_msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const nowIso = new Date().toISOString();
     const newMsg: WLCoachMessage = {
-      id: `wl_msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: clientGeneratedId,
       sender,
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      conversationId,
+      createdAt: nowIso,
     };
+
+    // Keep client-side state synchronized immediately
     coachMessagesStore.push(newMsg);
+
+    try {
+      const user = await requireAuthUser();
+      newMsg.userId = user.id;
+
+      const role = sender === 'ai' ? 'assistant' : 'user';
+      const { data, error } = await supabase
+        .from('ai_coach_messages')
+        .insert({
+          user_id: user.id,
+          conversation_id: conversationId,
+          role,
+          content: text,
+          created_at: nowIso,
+        })
+        .select('id, user_id, conversation_id, role, content, created_at')
+        .single();
+
+      if (error) {
+        console.warn('WLRepository.addCoachMessage Supabase insert error:', error.message || error);
+        throw error;
+      }
+
+      if (data) {
+        newMsg.id = String(data.id);
+        newMsg.createdAt = data.created_at;
+        // Update the item in the store with DB generated id
+        const idx = coachMessagesStore.findIndex((m) => m.id === clientGeneratedId);
+        if (idx !== -1) {
+          coachMessagesStore[idx] = newMsg;
+        }
+      }
+    } catch (dbErr) {
+      console.warn('WLRepository.addCoachMessage persistence error:', dbErr);
+      throw dbErr;
+    }
+
     return newMsg;
   }
 
-  static async clearCoachMessages(): Promise<void> {
+  static async clearCoachMessages(conversationId: string = 'weight_loss_default'): Promise<void> {
     coachMessagesStore = [];
+    try {
+      const user = await requireAuthUser();
+      const { error } = await supabase
+        .from('ai_coach_messages')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('conversation_id', conversationId);
+
+      if (error) {
+        console.warn('WLRepository.clearCoachMessages Supabase delete error:', error.message || error);
+        throw error;
+      }
+    } catch (err) {
+      console.warn('WLRepository.clearCoachMessages warning:', err);
+      throw err;
+    }
   }
 
   /* ================= DASHBOARD CACHE & DATA ================= */
