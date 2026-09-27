@@ -359,7 +359,7 @@ export function DiabetesHomeScreen({ profile, onNavigate, onSwitchGoal }: Props)
                 className="p-3.5 rounded-2xl border border-[#DCE7EE] hover:bg-[#EFF6F1] cursor-pointer transition-colors"
               >
                 <div className="font-semibold text-sm text-[#12324A]">3 Modules</div>
-                <div className="text-xs font-semibold text-[#4C5F55] mt-0.5 tracking-tight">Weight Loss • Nutrition • AI Coach</div>
+                <div className="text-xs font-semibold text-[#4C5F55] mt-0.5 tracking-tight">Cancer Awareness • Diabetes • Weight Loss</div>
               </div>
             </div>
           </div>

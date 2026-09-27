@@ -33,7 +33,7 @@ export const ACCOUNT_SWITCH_OPTIONS: AccountSwitchOption[] = [
     id: 'three_modules',
     key: '3modules',
     title: '3 Modules',
-    subtitle: 'Weight Loss • Nutrition • AI Coach',
+    subtitle: 'Cancer Awareness • Diabetes • Weight Loss',
     icon: Sparkles,
   },
 ];
@@ -146,7 +146,12 @@ export function CancerSettingsModal({
             {ACCOUNT_SWITCH_OPTIONS.map((option) => {
               const Icon = option.icon;
               const isSelected =
-                (option.id === 'three_modules' && (currentModule === 'three_modules' || currentModule === '3_modules')) ||
+                (option.id === 'three_modules' && (
+                  currentModule === 'three_modules' || 
+                  currentModule === '3_modules' ||
+                  currentModule === 'cancer_awareness' ||
+                  currentModule === 'diabetes_awareness'
+                )) ||
                 currentModule === option.id;
 
               return (

@@ -628,29 +628,29 @@ export function WLProfile({
                   setShowAccountSwitchModal(false);
                 }}
                 className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  activeModule === 'three_modules' || activeModule === '3_modules'
+                  activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness'
                     ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
                     : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                    activeModule === 'three_modules' || activeModule === '3_modules' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                    activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
                   }`}>
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className={`text-sm font-bold ${activeModule === 'three_modules' || activeModule === '3_modules' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                    <div className={`text-sm font-bold ${activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
                       3 Modules
                     </div>
                     <div className={`text-xs font-semibold mt-0.5 tracking-tight ${
-                      activeModule === 'three_modules' || activeModule === '3_modules' ? 'text-[#1F7A5C]' : 'text-[#4C5F55]'
+                      activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#4C5F55]'
                     }`}>
-                      Weight Loss • Nutrition • AI Coach
+                      Cancer Awareness • Diabetes • Weight Loss
                     </div>
                   </div>
                 </div>
-                {activeModule === 'three_modules' || activeModule === '3_modules' ? (
+                {activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? (
                   <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>

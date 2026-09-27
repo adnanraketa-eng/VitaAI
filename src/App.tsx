@@ -28,6 +28,7 @@ import { ProfileRepository } from './core/profile';
 import { AuthScreen } from './auth/AuthScreen';
 
 const ACTIVE_MODULE_STORAGE_KEY = 'vita_active_module';
+const THREE_MODULES_SUB_STORAGE_KEY = 'vita_three_modules_sub';
 
 export function getPersistedActiveModule(): ActiveModule {
   try {
@@ -48,6 +49,22 @@ export function getPersistedActiveModule(): ActiveModule {
   return 'three_modules';
 }
 
+export function getPersistedThreeModulesSub(): 'weight_loss' | 'cancer_awareness' | 'diabetes_awareness' {
+  try {
+    const activeSaved = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY);
+    if (activeSaved === 'cancer_awareness' || activeSaved === 'diabetes_awareness') {
+      return activeSaved;
+    }
+    const saved = localStorage.getItem(THREE_MODULES_SUB_STORAGE_KEY);
+    if (saved === 'cancer_awareness' || saved === 'diabetes_awareness' || saved === 'weight_loss') {
+      return saved;
+    }
+  } catch {
+    // Storage access fallback
+  }
+  return 'weight_loss';
+}
+
 export function persistActiveModule(mod: ActiveModule): void {
   try {
     const normalizedMod = mod === '3_modules' ? 'three_modules' : mod;
@@ -60,19 +77,52 @@ export function persistActiveModule(mod: ActiveModule): void {
 export default function App() {
   const [activeTab, setActiveTab] = useState<BottomTab>('home');
   const [activeModule, setActiveModule] = useState<ActiveModule>(getPersistedActiveModule);
+  const [threeModulesSub, setThreeModulesSub] = useState<'weight_loss' | 'cancer_awareness' | 'diabetes_awareness'>(
+    getPersistedThreeModulesSub
+  );
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
 
   const handleSwitchModule = (mod: ActiveModule) => {
     const normalizedMod = mod === '3_modules' ? 'three_modules' : mod;
+    if (normalizedMod === 'cancer_awareness' || normalizedMod === 'diabetes_awareness') {
+      setActiveModule('three_modules');
+      persistActiveModule('three_modules');
+      setThreeModulesSub(normalizedMod);
+      try {
+        localStorage.setItem(THREE_MODULES_SUB_STORAGE_KEY, normalizedMod);
+      } catch {
+        // Storage access fallback
+      }
+      setActiveTab('home');
+      return;
+    }
+
     setActiveModule(normalizedMod);
     persistActiveModule(normalizedMod);
-    if (normalizedMod === 'nutrition') {
+
+    if (normalizedMod === 'three_modules') {
+      setActiveTab('home');
+    } else if (normalizedMod === 'nutrition') {
       setActiveTab('history');
     } else {
       setActiveTab('home');
     }
+  };
+
+  const handleSwitchGoal = (goal: 'weight_loss' | 'cancer_awareness' | 'diabetes_awareness') => {
+    if (activeModule !== 'three_modules') {
+      setActiveModule('three_modules');
+      persistActiveModule('three_modules');
+    }
+    setThreeModulesSub(goal);
+    try {
+      localStorage.setItem(THREE_MODULES_SUB_STORAGE_KEY, goal);
+    } catch {
+      // Storage access fallback
+    }
+    setActiveTab('home');
   };
 
   useEffect(() => {
@@ -244,8 +294,13 @@ export default function App() {
     WLRepository.getCachedDashboard()
   );
 
-  const isCancerAwareness = activeModule === 'cancer_awareness';
-  const isDiabetesAwareness = activeModule === 'diabetes_awareness';
+  const effectiveModule =
+    activeModule === 'three_modules' || activeModule === '3_modules'
+      ? threeModulesSub
+      : activeModule;
+
+  const isCancerAwareness = effectiveModule === 'cancer_awareness';
+  const isDiabetesAwareness = effectiveModule === 'diabetes_awareness';
 
   const handleOnboardingComplete = async (data: OnboardingData) => {
     setSharedProfile((prev) => ({
@@ -356,7 +411,7 @@ export default function App() {
                 <DiabetesHomeScreen 
                   profile={sharedProfile} 
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={handleSwitchModule} 
+                  onSwitchGoal={handleSwitchGoal} 
                 />
               )}
               {activeTab === 'history' && <DiabetesHistoryScreen userName={sharedProfile.fullName} />}
@@ -364,7 +419,7 @@ export default function App() {
               {activeTab === 'coach' && <DiabetesCoachScreen userName={sharedProfile.fullName.split(' ')[0]} />}
               {activeTab === 'profile' && (
                  <ProfileScreen 
-                   activeModule={activeModule}
+                   activeModule={effectiveModule}
                    profile={sharedProfile}
                    onUpdateProfile={setSharedProfile}
                    weightLossSettings={weightLossSettings}
@@ -373,7 +428,7 @@ export default function App() {
                    onUpdateDiabetesSettings={setDiabetesSettings}
                    cancerSettings={cancerSettings}
                    onUpdateCancerSettings={setCancerSettings}
-                   onSwitchGoalRequest={() => handleSwitchModule('cancer_awareness')}
+                   onSwitchGoalRequest={() => handleSwitchGoal('cancer_awareness')}
                    onSwitchAccount={handleSwitchModule}
                  />
               )}
@@ -384,7 +439,7 @@ export default function App() {
                 <CancerHomeScreen 
                   profile={sharedProfile} 
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={handleSwitchModule} 
+                  onSwitchGoal={handleSwitchGoal} 
                 />
               )}
               {activeTab === 'history' && <CancerHistoryScreen userName={sharedProfile.fullName} />}
@@ -392,7 +447,7 @@ export default function App() {
               {activeTab === 'coach' && <CancerCoachScreen userName={sharedProfile.fullName.split(' ')[0]} />}
               {activeTab === 'profile' && (
                 <ProfileScreen 
-                  activeModule={activeModule}
+                  activeModule={effectiveModule}
                   profile={sharedProfile}
                   onUpdateProfile={setSharedProfile}
                   weightLossSettings={weightLossSettings}
@@ -401,7 +456,7 @@ export default function App() {
                   onUpdateDiabetesSettings={setDiabetesSettings}
                   cancerSettings={cancerSettings}
                   onUpdateCancerSettings={setCancerSettings}
-                  onSwitchGoalRequest={() => handleSwitchModule('weight_loss')}
+                  onSwitchGoalRequest={() => handleSwitchGoal('weight_loss')}
                   onSwitchAccount={handleSwitchModule}
                 />
               )}
@@ -413,7 +468,7 @@ export default function App() {
                   profile={sharedProfile}
                   settings={weightLossSettings}
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={handleSwitchModule}
+                  onSwitchGoal={handleSwitchGoal}
                   onUpdateSettings={setWeightLossSettings}
                   initialDashboardData={wlDashboardData}
                   onDataRefreshed={setWlDashboardData}
@@ -447,7 +502,7 @@ export default function App() {
                   onUpdateProfile={setSharedProfile}
                   onUpdateSettings={setWeightLossSettings}
                   onRestartOnboarding={() => setIsOnboarded(false)}
-                  onSwitchGoalRequest={() => handleSwitchModule('diabetes_awareness')}
+                  onSwitchGoalRequest={() => handleSwitchGoal('diabetes_awareness')}
                   activeModule={activeModule}
                   onSwitchAccount={handleSwitchModule}
                 />
@@ -460,7 +515,7 @@ export default function App() {
         <BottomNavigation 
           activeTab={activeTab} 
           onTabChange={setActiveTab} 
-          activeModule={activeModule}
+          activeModule={effectiveModule}
         />
       </div>
     </div>

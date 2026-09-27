@@ -443,7 +443,7 @@ export function HomePage({ onNavigate, onSwitchGoal }: Props) {
               <div className="p-3.5 rounded-2xl border-2 border-[#1F7A5C] bg-[#EFF6F1] flex items-center justify-between">
                 <div>
                   <div className="font-bold text-sm text-[#1F7A5C]">3 Modules (Active)</div>
-                  <div className="text-xs font-semibold text-[#1F7A5C] mt-0.5 tracking-tight">Weight Loss • Nutrition • AI Coach</div>
+                  <div className="text-xs font-semibold text-[#1F7A5C] mt-0.5 tracking-tight">Cancer Awareness • Diabetes • Weight Loss</div>
                 </div>
                 <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center">
                   <Check className="w-3.5 h-3.5" />
