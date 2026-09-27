@@ -1,5 +1,5 @@
 export type BottomTab = 'home' | 'history' | 'progress' | 'coach' | 'profile';
-export type ActiveModule = 'weight_loss' | 'cancer_awareness' | 'diabetes_awareness';
+export type ActiveModule = 'weight_loss' | 'nutrition' | 'three_modules' | '3_modules' | 'cancer_awareness' | 'diabetes_awareness';
 
 export interface UserSharedProfile {
   fullName: string;

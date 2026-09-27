@@ -32,18 +32,26 @@ const ACTIVE_MODULE_STORAGE_KEY = 'vita_active_module';
 export function getPersistedActiveModule(): ActiveModule {
   try {
     const saved = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY) as ActiveModule | null;
-    if (saved === 'weight_loss' || saved === 'cancer_awareness' || saved === 'diabetes_awareness') {
-      return saved;
+    if (
+      saved === 'weight_loss' ||
+      saved === 'nutrition' ||
+      saved === 'three_modules' ||
+      saved === '3_modules' ||
+      saved === 'cancer_awareness' ||
+      saved === 'diabetes_awareness'
+    ) {
+      return saved === '3_modules' ? 'three_modules' : saved;
     }
   } catch {
     // Storage access fallback
   }
-  return 'weight_loss';
+  return 'three_modules';
 }
 
 export function persistActiveModule(mod: ActiveModule): void {
   try {
-    localStorage.setItem(ACTIVE_MODULE_STORAGE_KEY, mod);
+    const normalizedMod = mod === '3_modules' ? 'three_modules' : mod;
+    localStorage.setItem(ACTIVE_MODULE_STORAGE_KEY, normalizedMod);
   } catch {
     // Storage access fallback
   }
@@ -57,9 +65,14 @@ export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
 
   const handleSwitchModule = (mod: ActiveModule) => {
-    setActiveModule(mod);
-    persistActiveModule(mod);
-    setActiveTab('home');
+    const normalizedMod = mod === '3_modules' ? 'three_modules' : mod;
+    setActiveModule(normalizedMod);
+    persistActiveModule(normalizedMod);
+    if (normalizedMod === 'nutrition') {
+      setActiveTab('history');
+    } else {
+      setActiveTab('home');
+    }
   };
 
   useEffect(() => {
