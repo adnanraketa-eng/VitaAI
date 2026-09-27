@@ -329,16 +329,7 @@ export function DiabetesHomeScreen({ profile, onNavigate, onSwitchGoal }: Props)
             </p>
 
             <div className="space-y-2.5">
-              {/* Diabetes Awareness (Active) */}
-              <div className="p-3.5 rounded-2xl border-2 border-[#1769AA] bg-[#EAF5FB]">
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-sm text-[#12324A]">Diabetes-Friendly Eating</div>
-                  <span className="text-[10px] font-bold text-[#1769AA] bg-white px-2 py-0.5 rounded-full">ACTIVE</span>
-                </div>
-                <div className="text-xs text-[#536675] mt-0.5">Glycemic balance and blood sugar awareness.</div>
-              </div>
-
-              {/* Cancer-Aware Nutrition */}
+              {/* Option 1: Cancer Awareness */}
               <div 
                 onClick={() => {
                   onSwitchGoal('cancer_awareness');
@@ -346,11 +337,20 @@ export function DiabetesHomeScreen({ profile, onNavigate, onSwitchGoal }: Props)
                 }}
                 className="p-3.5 rounded-2xl border border-[#DCE7EE] hover:bg-[#EFE7F5] cursor-pointer transition-colors"
               >
-                <div className="font-semibold text-sm text-[#12324A]">Cancer-Aware Nutrition</div>
-                <div className="text-xs text-[#536675] mt-0.5">Support long-term cellular wellness.</div>
+                <div className="font-semibold text-sm text-[#12324A]">Cancer Awareness</div>
+                <div className="text-xs text-[#536675] mt-0.5">Cancer-Aware Nutrition & Cellular Wellness</div>
               </div>
 
-              {/* Weight Loss */}
+              {/* Option 2: Diabetes Awareness (Active) */}
+              <div className="p-3.5 rounded-2xl border-2 border-[#1769AA] bg-[#EAF5FB]">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-sm text-[#12324A]">Diabetes Awareness</div>
+                  <span className="text-[10px] font-bold text-[#1769AA] bg-white px-2 py-0.5 rounded-full">ACTIVE</span>
+                </div>
+                <div className="text-xs text-[#536675] mt-0.5">Diabetes-Friendly Eating & Glycemic Control</div>
+              </div>
+
+              {/* Option 3: 3 Modules */}
               <div 
                 onClick={() => {
                   onSwitchGoal('weight_loss');
@@ -358,8 +358,8 @@ export function DiabetesHomeScreen({ profile, onNavigate, onSwitchGoal }: Props)
                 }}
                 className="p-3.5 rounded-2xl border border-[#DCE7EE] hover:bg-[#EFF6F1] cursor-pointer transition-colors"
               >
-                <div className="font-semibold text-sm text-[#12324A]">Weight Loss & Fitness</div>
-                <div className="text-xs text-[#536675] mt-0.5">Calorie balance and healthy metabolism.</div>
+                <div className="font-semibold text-sm text-[#12324A]">3 Modules</div>
+                <div className="text-xs font-semibold text-[#4C5F55] mt-0.5 tracking-tight">Weight Loss • Nutrition • AI Coach</div>
               </div>
             </div>
           </div>

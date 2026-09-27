@@ -2,25 +2,45 @@ import { useState } from 'react';
 import { 
   ArrowLeft, Scale, Target, Activity, Footprints, 
   Droplet, Flame, Beef, Utensils, ChevronRight, Check, Sparkles,
-  Trash2, Loader2, AlertCircle
+  Trash2, Loader2, AlertCircle, Shield
 } from 'lucide-react';
-import { WeightLossSettings } from '../../types';
+import { WeightLossSettings, ActiveModule } from '../../types';
 import { ProfileRepository } from '../../core/profile';
 
 interface Props {
   settings: WeightLossSettings;
   onSaveSettings: (settings: WeightLossSettings) => void;
   onClose: () => void;
+  activeModule?: ActiveModule;
+  onSwitchAccount?: (module: ActiveModule) => void;
 }
 
 export function WeightLossSettingsModal({
   settings,
   onSaveSettings,
   onClose,
+  activeModule = 'weight_loss',
+  onSwitchAccount,
 }: Props) {
+  const [currentModule, setCurrentModule] = useState<ActiveModule>(activeModule);
   const [localSettings, setLocalSettings] = useState<WeightLossSettings>({ ...settings });
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+
+  const handleAccountSwitch = (mod: ActiveModule) => {
+    setCurrentModule(mod);
+    try {
+      localStorage.setItem('vita_active_module', mod);
+    } catch {
+      // storage fallback
+    }
+    if (onSwitchAccount) {
+      onSwitchAccount(mod);
+    }
+    if (mod !== 'weight_loss') {
+      onClose();
+    }
+  };
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -99,6 +119,120 @@ export function WeightLossSettingsModal({
             <p className="text-xs text-[#4C5F55]">
               Personalized metrics and targets for your weight goals.
             </p>
+          </div>
+        </div>
+
+        {/* Account Switch Section */}
+        <div className="space-y-2">
+          <div>
+            <h3 className="text-sm font-bold text-[#1B2B24]">Account Switch</h3>
+            <p className="text-xs text-[#8A9A92]">Select your active health module experience.</p>
+          </div>
+
+          <div className="space-y-2.5">
+            {/* Option 1: Cancer Awareness */}
+            <div
+              id="account-switch-modal-cancer"
+              onClick={() => handleAccountSwitch('cancer_awareness')}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                currentModule === 'cancer_awareness'
+                  ? 'border-2 border-[#5A3577] bg-[#EFE7F5]'
+                  : 'border-[#DCE6E0] bg-white hover:bg-[#F6FAF7]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                  currentModule === 'cancer_awareness' ? 'bg-white text-[#5A3577] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                }`}>
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className={`text-sm font-bold ${currentModule === 'cancer_awareness' ? 'text-[#5A3577]' : 'text-[#1B2B24]'}`}>
+                    Cancer Awareness
+                  </div>
+                  <div className={`text-xs ${currentModule === 'cancer_awareness' ? 'text-[#6B6275] font-medium' : 'text-[#8A9A92]'}`}>
+                    Cancer-Aware Nutrition & Cellular Wellness
+                  </div>
+                </div>
+              </div>
+              {currentModule === 'cancer_awareness' ? (
+                <div className="w-5 h-5 rounded-full bg-[#5A3577] text-white flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+              )}
+            </div>
+
+            {/* Option 2: Diabetes Awareness */}
+            <div
+              id="account-switch-modal-diabetes"
+              onClick={() => handleAccountSwitch('diabetes_awareness')}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                currentModule === 'diabetes_awareness'
+                  ? 'border-2 border-[#1769AA] bg-[#EAF5FB]'
+                  : 'border-[#DCE6E0] bg-white hover:bg-[#F6FAF7]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                  currentModule === 'diabetes_awareness' ? 'bg-white text-[#1769AA] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                }`}>
+                  <Droplet className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className={`text-sm font-bold ${currentModule === 'diabetes_awareness' ? 'text-[#1769AA]' : 'text-[#1B2B24]'}`}>
+                    Diabetes Awareness
+                  </div>
+                  <div className={`text-xs ${currentModule === 'diabetes_awareness' ? 'text-[#536675] font-medium' : 'text-[#8A9A92]'}`}>
+                    Diabetes-Friendly Eating & Glycemic Control
+                  </div>
+                </div>
+              </div>
+              {currentModule === 'diabetes_awareness' ? (
+                <div className="w-5 h-5 rounded-full bg-[#1769AA] text-white flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+              )}
+            </div>
+
+            {/* Option 3: 3 Modules */}
+            <div
+              id="account-switch-modal-3modules"
+              onClick={() => handleAccountSwitch('weight_loss')}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                currentModule === 'weight_loss'
+                  ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                  : 'border-[#DCE6E0] bg-white hover:bg-[#F6FAF7]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                  currentModule === 'weight_loss' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                }`}>
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className={`text-sm font-bold ${currentModule === 'weight_loss' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                    3 Modules
+                  </div>
+                  <div className={`text-xs font-semibold mt-0.5 tracking-tight ${
+                    currentModule === 'weight_loss' ? 'text-[#1F7A5C]' : 'text-[#4C5F55]'
+                  }`}>
+                    Weight Loss • Nutrition • AI Coach
+                  </div>
+                </div>
+              </div>
+              {currentModule === 'weight_loss' ? (
+                <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+              )}
+            </div>
           </div>
         </div>
 

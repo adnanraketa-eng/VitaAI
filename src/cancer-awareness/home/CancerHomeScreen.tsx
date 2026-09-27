@@ -460,7 +460,7 @@ export function CancerHomeScreen({ profile, onNavigate, onSwitchGoal }: Props) {
             </p>
 
             <div className="space-y-2.5">
-              {/* Cancer-Aware Nutrition (Active) */}
+              {/* Option 1: Cancer Awareness (Active) */}
               <div 
                 onClick={() => {
                   onSwitchGoal('cancer_awareness');
@@ -469,27 +469,15 @@ export function CancerHomeScreen({ profile, onNavigate, onSwitchGoal }: Props) {
                 className="p-3.5 rounded-2xl border-2 border-[#5A3577] bg-[#EFE7F5] flex items-center justify-between cursor-pointer"
               >
                 <div>
-                  <div className="font-bold text-sm text-[#5A3577]">Cancer-Aware Nutrition (Active)</div>
-                  <div className="text-xs text-[#402359] mt-0.5">Support long-term cellular wellness & cell protection.</div>
+                  <div className="font-bold text-sm text-[#5A3577]">Cancer Awareness (Active)</div>
+                  <div className="text-xs text-[#402359] mt-0.5">Cancer-Aware Nutrition & Cellular Wellness</div>
                 </div>
                 <div className="w-5 h-5 rounded-full bg-[#5A3577] text-white flex items-center justify-center shrink-0">
                   <Check className="w-3.5 h-3.5" />
                 </div>
               </div>
 
-              {/* Weight Loss & Management */}
-              <div 
-                onClick={() => {
-                  onSwitchGoal('weight_loss');
-                  setShowGoalModal(false);
-                }}
-                className="p-3.5 rounded-2xl border border-[#E4DEE9] hover:bg-[#F6F3F7] cursor-pointer transition-colors"
-              >
-                <div className="font-semibold text-sm text-[#2A2233]">Weight Loss & Management</div>
-                <div className="text-xs text-[#6B6275] mt-0.5">Healthy caloric deficit & nutrient-dense meals.</div>
-              </div>
-
-              {/* Diabetes-Friendly & Glycemic Control */}
+              {/* Option 2: Diabetes Awareness */}
               <div 
                 onClick={() => {
                   onSwitchGoal('diabetes_awareness');
@@ -497,8 +485,20 @@ export function CancerHomeScreen({ profile, onNavigate, onSwitchGoal }: Props) {
                 }}
                 className="p-3.5 rounded-2xl border border-[#E4DEE9] hover:bg-[#F6F3F7] cursor-pointer transition-colors"
               >
-                <div className="font-semibold text-sm text-[#2A2233]">Diabetes-Friendly & Glycemic Control</div>
-                <div className="text-xs text-[#6B6275] mt-0.5">Balanced macronutrients and steady fiber.</div>
+                <div className="font-semibold text-sm text-[#2A2233]">Diabetes Awareness</div>
+                <div className="text-xs text-[#6B6275] mt-0.5">Diabetes-Friendly Eating & Glycemic Control</div>
+              </div>
+
+              {/* Option 3: 3 Modules */}
+              <div 
+                onClick={() => {
+                  onSwitchGoal('weight_loss');
+                  setShowGoalModal(false);
+                }}
+                className="p-3.5 rounded-2xl border border-[#E4DEE9] hover:bg-[#F6F3F7] cursor-pointer transition-colors"
+              >
+                <div className="font-semibold text-sm text-[#2A2233]">3 Modules</div>
+                <div className="text-xs font-semibold text-[#4C5F55] mt-0.5 tracking-tight">Weight Loss • Nutrition • AI Coach</div>
               </div>
             </div>
 

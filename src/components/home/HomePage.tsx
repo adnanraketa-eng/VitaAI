@@ -425,18 +425,8 @@ export function HomePage({ onNavigate, onSwitchGoal }: Props) {
                 }}
                 className="p-3.5 rounded-2xl border border-[#DCE6E0] hover:bg-[#EFF6F1] cursor-pointer transition-colors"
               >
-                <div className="font-semibold text-sm text-[#1B2B24]">Cancer-Aware Nutrition</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">Support long-term cellular wellness.</div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl border-2 border-[#1F7A5C] bg-[#EFF6F1] flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-sm text-[#1F7A5C]">Weight Loss & Management (Active)</div>
-                  <div className="text-xs text-[#4C5F55] mt-0.5">Healthy caloric deficit & nutrient-dense meals.</div>
-                </div>
-                <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center">
-                  <Check className="w-3.5 h-3.5" />
-                </div>
+                <div className="font-semibold text-sm text-[#1B2B24]">Cancer Awareness</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">Cancer-Aware Nutrition & Cellular Wellness</div>
               </div>
 
               <div 
@@ -446,8 +436,18 @@ export function HomePage({ onNavigate, onSwitchGoal }: Props) {
                 }}
                 className="p-3.5 rounded-2xl border border-[#DCE6E0] hover:bg-[#EFF6F1] cursor-pointer transition-colors"
               >
-                <div className="font-semibold text-sm text-[#1B2B24]">Diabetes-Friendly & Glycemic Control</div>
-                <div className="text-xs text-[#8A9A92] mt-0.5">Balanced macronutrients and steady fiber.</div>
+                <div className="font-semibold text-sm text-[#1B2B24]">Diabetes Awareness</div>
+                <div className="text-xs text-[#8A9A92] mt-0.5">Diabetes-Friendly Eating & Glycemic Control</div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl border-2 border-[#1F7A5C] bg-[#EFF6F1] flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm text-[#1F7A5C]">3 Modules (Active)</div>
+                  <div className="text-xs font-semibold text-[#1F7A5C] mt-0.5 tracking-tight">Weight Loss • Nutrition • AI Coach</div>
+                </div>
+                <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center">
+                  <Check className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
 

@@ -39,6 +39,7 @@ interface Props {
   cancerSettings: CancerAwarenessSettings;
   onUpdateCancerSettings: (settings: CancerAwarenessSettings) => void;
   onSwitchGoalRequest: () => void;
+  onSwitchAccount?: (module: ActiveModule) => void;
 }
 
 export function ProfileScreen({
@@ -52,6 +53,7 @@ export function ProfileScreen({
   cancerSettings,
   onUpdateCancerSettings,
   onSwitchGoalRequest,
+  onSwitchAccount,
 }: Props) {
   // Navigation to sub-modals
   const [showPersonalDetails, setShowPersonalDetails] = useState(false);
@@ -347,6 +349,8 @@ export function ProfileScreen({
             settings={diabetesSettings}
             onSaveSettings={onUpdateDiabetesSettings}
             onClose={() => setShowModuleSettings(false)}
+            activeModule={activeModule}
+            onSwitchAccount={onSwitchAccount}
           />
         )}
       </div>
@@ -541,6 +545,8 @@ export function ProfileScreen({
             settings={cancerSettings}
             onSaveSettings={onUpdateCancerSettings}
             onClose={() => setShowModuleSettings(false)}
+            activeModule={activeModule}
+            onSwitchAccount={onSwitchAccount}
           />
         )}
       </div>
@@ -836,6 +842,8 @@ export function ProfileScreen({
           settings={weightLossSettings}
           onSaveSettings={onUpdateWeightLossSettings}
           onClose={() => setShowModuleSettings(false)}
+          activeModule={activeModule}
+          onSwitchAccount={onSwitchAccount}
         />
       )}
     </div>

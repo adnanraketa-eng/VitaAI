@@ -27,12 +27,40 @@ import { supabase } from './core/supabase';
 import { ProfileRepository } from './core/profile';
 import { AuthScreen } from './auth/AuthScreen';
 
+const ACTIVE_MODULE_STORAGE_KEY = 'vita_active_module';
+
+export function getPersistedActiveModule(): ActiveModule {
+  try {
+    const saved = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY) as ActiveModule | null;
+    if (saved === 'weight_loss' || saved === 'cancer_awareness' || saved === 'diabetes_awareness') {
+      return saved;
+    }
+  } catch {
+    // Storage access fallback
+  }
+  return 'weight_loss';
+}
+
+export function persistActiveModule(mod: ActiveModule): void {
+  try {
+    localStorage.setItem(ACTIVE_MODULE_STORAGE_KEY, mod);
+  } catch {
+    // Storage access fallback
+  }
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<BottomTab>('home');
-  const [activeModule, setActiveModule] = useState<ActiveModule>('weight_loss');
+  const [activeModule, setActiveModule] = useState<ActiveModule>(getPersistedActiveModule);
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
+
+  const handleSwitchModule = (mod: ActiveModule) => {
+    setActiveModule(mod);
+    persistActiveModule(mod);
+    setActiveTab('home');
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -241,11 +269,11 @@ export default function App() {
     }
 
     if (data.primaryGoal === 'diabetes_awareness') {
-      setActiveModule('diabetes_awareness');
+      handleSwitchModule('diabetes_awareness');
     } else if (data.primaryGoal === 'cancer_awareness') {
-      setActiveModule('cancer_awareness');
+      handleSwitchModule('cancer_awareness');
     } else {
-      setActiveModule('weight_loss');
+      handleSwitchModule('weight_loss');
     }
 
     setActiveTab('home');
@@ -315,31 +343,26 @@ export default function App() {
                 <DiabetesHomeScreen 
                   profile={sharedProfile} 
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={(mod) => {
-                    setActiveModule(mod);
-                    setActiveTab('home');
-                  }} 
+                  onSwitchGoal={handleSwitchModule} 
                 />
               )}
               {activeTab === 'history' && <DiabetesHistoryScreen userName={sharedProfile.fullName} />}
               {activeTab === 'progress' && <DiabetesProgressScreen onNavigate={setActiveTab} />}
               {activeTab === 'coach' && <DiabetesCoachScreen userName={sharedProfile.fullName.split(' ')[0]} />}
               {activeTab === 'profile' && (
-                <ProfileScreen 
-                  activeModule={activeModule}
-                  profile={sharedProfile}
-                  onUpdateProfile={setSharedProfile}
-                  weightLossSettings={weightLossSettings}
-                  onUpdateWeightLossSettings={setWeightLossSettings}
-                  diabetesSettings={diabetesSettings}
-                  onUpdateDiabetesSettings={setDiabetesSettings}
-                  cancerSettings={cancerSettings}
-                  onUpdateCancerSettings={setCancerSettings}
-                  onSwitchGoalRequest={() => {
-                    setActiveModule('cancer_awareness');
-                    setActiveTab('home');
-                  }}
-                />
+                 <ProfileScreen 
+                   activeModule={activeModule}
+                   profile={sharedProfile}
+                   onUpdateProfile={setSharedProfile}
+                   weightLossSettings={weightLossSettings}
+                   onUpdateWeightLossSettings={setWeightLossSettings}
+                   diabetesSettings={diabetesSettings}
+                   onUpdateDiabetesSettings={setDiabetesSettings}
+                   cancerSettings={cancerSettings}
+                   onUpdateCancerSettings={setCancerSettings}
+                   onSwitchGoalRequest={() => handleSwitchModule('cancer_awareness')}
+                   onSwitchAccount={handleSwitchModule}
+                 />
               )}
             </>
           ) : isCancerAwareness ? (
@@ -348,10 +371,7 @@ export default function App() {
                 <CancerHomeScreen 
                   profile={sharedProfile} 
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={(mod) => {
-                    setActiveModule(mod);
-                    setActiveTab('home');
-                  }} 
+                  onSwitchGoal={handleSwitchModule} 
                 />
               )}
               {activeTab === 'history' && <CancerHistoryScreen userName={sharedProfile.fullName} />}
@@ -368,10 +388,8 @@ export default function App() {
                   onUpdateDiabetesSettings={setDiabetesSettings}
                   cancerSettings={cancerSettings}
                   onUpdateCancerSettings={setCancerSettings}
-                  onSwitchGoalRequest={() => {
-                    setActiveModule('weight_loss');
-                    setActiveTab('home');
-                  }}
+                  onSwitchGoalRequest={() => handleSwitchModule('weight_loss')}
+                  onSwitchAccount={handleSwitchModule}
                 />
               )}
             </>
@@ -382,10 +400,7 @@ export default function App() {
                   profile={sharedProfile}
                   settings={weightLossSettings}
                   onNavigate={setActiveTab} 
-                  onSwitchGoal={(mod) => {
-                    setActiveModule(mod);
-                    setActiveTab('home');
-                  }}
+                  onSwitchGoal={handleSwitchModule}
                   onUpdateSettings={setWeightLossSettings}
                   initialDashboardData={wlDashboardData}
                   onDataRefreshed={setWlDashboardData}
@@ -419,10 +434,9 @@ export default function App() {
                   onUpdateProfile={setSharedProfile}
                   onUpdateSettings={setWeightLossSettings}
                   onRestartOnboarding={() => setIsOnboarded(false)}
-                  onSwitchGoalRequest={() => {
-                    setActiveModule('diabetes_awareness');
-                    setActiveTab('home');
-                  }}
+                  onSwitchGoalRequest={() => handleSwitchModule('diabetes_awareness')}
+                  activeModule={activeModule}
+                  onSwitchAccount={handleSwitchModule}
                 />
               )}
             </>
