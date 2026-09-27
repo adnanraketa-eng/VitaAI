@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Shield, Droplet, Scale, Sparkles } from 'lucide-react';
 import { BottomTab, ActiveModule, UserSharedProfile, WeightLossSettings } from './types';
 import { BottomNavigation } from './components/BottomNavigation';
 import { WLHome } from './weight-loss/home/WLHome';
@@ -299,6 +300,7 @@ export default function App() {
       ? threeModulesSub
       : activeModule;
 
+  const isThreeModulesActive = activeModule === 'three_modules' || activeModule === '3_modules';
   const isCancerAwareness = effectiveModule === 'cancer_awareness';
   const isDiabetesAwareness = effectiveModule === 'diabetes_awareness';
 
@@ -403,6 +405,74 @@ export default function App() {
     <div className={`min-h-screen ${getOuterBg()} flex justify-center ${getSelectionColor()}`}>
       {/* Mobile viewport container */}
       <div className={`w-full max-w-md ${getContainerBg()} min-h-screen relative shadow-2xl flex flex-col border-x`}>
+        {/* 3 Modules Switcher Bar - Active when "3 Modules" is selected in Settings */}
+        {isThreeModulesActive && (
+          <div 
+            id="three-modules-top-bar"
+            data-testid="three-modules-top-bar"
+            className="bg-white/95 backdrop-blur-md border-b border-[#DCE6E0] px-3 pt-2.5 pb-2 z-40 sticky top-0"
+          >
+            <div className="flex items-center justify-between mb-1.5 px-0.5">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#1F7A5C]" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1B2B24]">
+                  3 Modules Active
+                </span>
+              </div>
+              <span className="text-[10px] font-medium text-[#8A9A92]">
+                Switch active module
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#EFF6F1] rounded-2xl">
+              {/* 1. Cancer Awareness */}
+              <button
+                id="module-switch-cancer"
+                data-testid="module-switch-cancer"
+                onClick={() => handleSwitchGoal('cancer_awareness')}
+                className={`py-1.5 px-1 rounded-xl text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  effectiveModule === 'cancer_awareness'
+                    ? 'bg-white text-[#5A3577] font-bold shadow-xs border border-[#E4DEE9]'
+                    : 'text-[#6B6275] hover:text-[#2A2233] font-semibold text-xs'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] truncate">Cancer</span>
+              </button>
+
+              {/* 2. Diabetes */}
+              <button
+                id="module-switch-diabetes"
+                data-testid="module-switch-diabetes"
+                onClick={() => handleSwitchGoal('diabetes_awareness')}
+                className={`py-1.5 px-1 rounded-xl text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  effectiveModule === 'diabetes_awareness'
+                    ? 'bg-white text-[#1769AA] font-bold shadow-xs border border-[#DCE7EE]'
+                    : 'text-[#536675] hover:text-[#12324A] font-semibold text-xs'
+                }`}
+              >
+                <Droplet className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] truncate">Diabetes</span>
+              </button>
+
+              {/* 3. Weight Loss */}
+              <button
+                id="module-switch-weight-loss"
+                data-testid="module-switch-weight-loss"
+                onClick={() => handleSwitchGoal('weight_loss')}
+                className={`py-1.5 px-1 rounded-xl text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  effectiveModule === 'weight_loss'
+                    ? 'bg-white text-[#1F7A5C] font-bold shadow-xs border border-[#DCE6E0]'
+                    : 'text-[#4C5F55] hover:text-[#1B2B24] font-semibold text-xs'
+                }`}
+              >
+                <Scale className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] truncate">Weight Loss</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Render Current Tab Page */}
         <div className="flex-1">
           {isDiabetesAwareness ? (
@@ -420,6 +490,7 @@ export default function App() {
               {activeTab === 'profile' && (
                  <ProfileScreen 
                    activeModule={effectiveModule}
+                   accountModule={activeModule}
                    profile={sharedProfile}
                    onUpdateProfile={setSharedProfile}
                    weightLossSettings={weightLossSettings}
@@ -448,6 +519,7 @@ export default function App() {
               {activeTab === 'profile' && (
                 <ProfileScreen 
                   activeModule={effectiveModule}
+                  accountModule={activeModule}
                   profile={sharedProfile}
                   onUpdateProfile={setSharedProfile}
                   weightLossSettings={weightLossSettings}

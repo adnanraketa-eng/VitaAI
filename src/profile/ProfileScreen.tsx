@@ -30,6 +30,7 @@ export function calculateAge(dobString: string | null | undefined): number | nul
 
 interface Props {
   activeModule: ActiveModule;
+  accountModule?: ActiveModule;
   profile: UserSharedProfile;
   onUpdateProfile: (profile: UserSharedProfile) => void;
   weightLossSettings: WeightLossSettings;
@@ -44,6 +45,7 @@ interface Props {
 
 export function ProfileScreen({
   activeModule,
+  accountModule,
   profile,
   onUpdateProfile,
   weightLossSettings,
@@ -349,7 +351,7 @@ export function ProfileScreen({
             settings={diabetesSettings}
             onSaveSettings={onUpdateDiabetesSettings}
             onClose={() => setShowModuleSettings(false)}
-            activeModule={activeModule}
+            activeModule={accountModule || activeModule}
             onSwitchAccount={onSwitchAccount}
           />
         )}
@@ -545,7 +547,7 @@ export function ProfileScreen({
             settings={cancerSettings}
             onSaveSettings={onUpdateCancerSettings}
             onClose={() => setShowModuleSettings(false)}
-            activeModule={activeModule}
+            activeModule={accountModule || activeModule}
             onSwitchAccount={onSwitchAccount}
           />
         )}
@@ -842,7 +844,7 @@ export function ProfileScreen({
           settings={weightLossSettings}
           onSaveSettings={onUpdateWeightLossSettings}
           onClose={() => setShowModuleSettings(false)}
-          activeModule={activeModule}
+          activeModule={accountModule || activeModule}
           onSwitchAccount={onSwitchAccount}
         />
       )}
