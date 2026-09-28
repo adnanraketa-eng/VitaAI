@@ -3,7 +3,7 @@ import {
   User, Droplet, Shield, Sparkles, ChevronRight, Bell, Lock, 
   HelpCircle, LogOut, Flame, RotateCw, Edit3, Settings, 
   TrendingUp, Droplets, Award, Utensils, Moon, Info, Scale,
-  AlertCircle, Loader2
+  AlertCircle, Loader2, Check, X
 } from 'lucide-react';
 import { UserSharedProfile, WeightLossSettings, ActiveModule } from '../types';
 import { DiabetesAwarenessSettings } from '../diabetes-awareness/types';
@@ -60,6 +60,7 @@ export function ProfileScreen({
   // Navigation to sub-modals
   const [showPersonalDetails, setShowPersonalDetails] = useState(false);
   const [showModuleSettings, setShowModuleSettings] = useState(false);
+  const [showAccountSwitchModal, setShowAccountSwitchModal] = useState(false);
 
   // Authoritative shared profile state loaded directly from public.profiles
   const [profileData, setProfileData] = useState<SharedProfile | null>(null);
@@ -139,6 +140,170 @@ export function ProfileScreen({
     gender,
     heightCm: heightCm ?? 0,
   };
+
+  const renderAccountSwitchModal = () => (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-[#DCE6E0]">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-[#1B2B24]">Account Switch</h3>
+          <button 
+            onClick={() => setShowAccountSwitchModal(false)} 
+            className="text-[#8A9A92] hover:text-[#1B2B24] p-1 rounded-full"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="text-xs text-[#4C5F55]">
+          Choose which health module experience you want to activate.
+        </p>
+
+        <div className="space-y-2.5">
+          {/* Option 1: Cancer Awareness */}
+          <div 
+            id="account-switch-profile-modal-cancer"
+            data-testid="account-switch-profile-modal-cancer"
+            onClick={() => {
+              try {
+                localStorage.setItem('vita_active_module', 'cancer_awareness');
+              } catch {
+                // storage fallback
+              }
+              if (onSwitchAccount) {
+                onSwitchAccount('cancer_awareness');
+              }
+              setShowAccountSwitchModal(false);
+            }}
+            className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+              (accountModule || activeModule) === 'cancer_awareness'
+                ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                (accountModule || activeModule) === 'cancer_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+              }`}>
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <div className={`text-sm font-bold ${(accountModule || activeModule) === 'cancer_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                  Cancer Awareness
+                </div>
+                <div className={`text-xs mt-0.5 tracking-tight ${(accountModule || activeModule) === 'cancer_awareness' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
+                  Cancer Awareness & Prevention
+                </div>
+              </div>
+            </div>
+            {(accountModule || activeModule) === 'cancer_awareness' ? (
+              <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </div>
+            ) : (
+              <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+            )}
+          </div>
+
+          {/* Option 2: Diabetes */}
+          <div 
+            id="account-switch-profile-modal-diabetes"
+            data-testid="account-switch-profile-modal-diabetes"
+            onClick={() => {
+              try {
+                localStorage.setItem('vita_active_module', 'diabetes_awareness');
+              } catch {
+                // storage fallback
+              }
+              if (onSwitchAccount) {
+                onSwitchAccount('diabetes_awareness');
+              }
+              setShowAccountSwitchModal(false);
+            }}
+            className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+              (accountModule || activeModule) === 'diabetes_awareness'
+                ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                (accountModule || activeModule) === 'diabetes_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+              }`}>
+                <Droplet className="w-4 h-4" />
+              </div>
+              <div>
+                <div className={`text-sm font-bold ${(accountModule || activeModule) === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                  Diabetes
+                </div>
+                <div className={`text-xs mt-0.5 tracking-tight ${(accountModule || activeModule) === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
+                  Diabetes Management & Tracking
+                </div>
+              </div>
+            </div>
+            {(accountModule || activeModule) === 'diabetes_awareness' ? (
+              <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </div>
+            ) : (
+              <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+            )}
+          </div>
+
+          {/* Option 3: Weight Loss */}
+          <div 
+            id="account-switch-profile-modal-weight-loss"
+            data-testid="account-switch-profile-modal-weight-loss"
+            onClick={() => {
+              try {
+                localStorage.setItem('vita_active_module', 'weight_loss');
+              } catch {
+                // storage fallback
+              }
+              if (onSwitchAccount) {
+                onSwitchAccount('weight_loss');
+              }
+              setShowAccountSwitchModal(false);
+            }}
+            className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+              (accountModule || activeModule) === 'weight_loss'
+                ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                (accountModule || activeModule) === 'weight_loss' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+              }`}>
+                <Scale className="w-4 h-4" />
+              </div>
+              <div>
+                <div className={`text-sm font-bold ${(accountModule || activeModule) === 'weight_loss' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                  Weight Loss
+                </div>
+                <div className={`text-xs mt-0.5 tracking-tight ${(accountModule || activeModule) === 'weight_loss' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
+                  Weight Tracking & Calorie Deficit
+                </div>
+              </div>
+            </div>
+            {(accountModule || activeModule) === 'weight_loss' ? (
+              <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </div>
+            ) : (
+              <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+            )}
+          </div>
+        </div>
+
+        <button 
+          onClick={() => setShowAccountSwitchModal(false)}
+          className="w-full py-2.5 bg-[#1F7A5C] text-white rounded-xl font-semibold text-sm hover:bg-[#15533E] transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
 
   const renderLoadingState = () => (
     <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
@@ -287,6 +452,25 @@ export function ProfileScreen({
               <ChevronRight className="w-4 h-4 text-[#8A9A92]" />
             </button>
 
+            {/* Account Switch */}
+            <button 
+              id="btn-account-switch-diabetes"
+              data-testid="btn-account-switch-diabetes"
+              onClick={() => setShowAccountSwitchModal(true)}
+              className="w-full p-4 flex items-center justify-between text-left hover:bg-[#F7FAFC] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-[#EFF6F1] text-[#1F7A5C] flex items-center justify-center">
+                  <RotateCw className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-[#12324A] block">Account Switch</span>
+                  <span className="text-[11px] text-[#536675]">Cancer Awareness, Diabetes, or Weight Loss</span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#8A9A92]" />
+            </button>
+
             {/* Notifications */}
             <div className="p-4 flex items-center justify-between text-left hover:bg-[#F7FAFC] transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
@@ -355,6 +539,7 @@ export function ProfileScreen({
             onSwitchAccount={onSwitchAccount}
           />
         )}
+        {showAccountSwitchModal && renderAccountSwitchModal()}
       </div>
     );
   }
@@ -483,6 +668,25 @@ export function ProfileScreen({
               <ChevronRight className="w-4 h-4 text-[#8A9A92]" />
             </button>
 
+            {/* Account Switch */}
+            <button 
+              id="btn-account-switch-cancer"
+              data-testid="btn-account-switch-cancer"
+              onClick={() => setShowAccountSwitchModal(true)}
+              className="w-full p-4 flex items-center justify-between text-left hover:bg-[#F6F3F7] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-[#EFF6F1] text-[#1F7A5C] flex items-center justify-center">
+                  <RotateCw className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-[#2A2233] block">Account Switch</span>
+                  <span className="text-[11px] text-[#6B6275]">Cancer Awareness, Diabetes, or Weight Loss</span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#8A9A92]" />
+            </button>
+
             {/* Notifications */}
             <div className="p-4 flex items-center justify-between text-left hover:bg-[#F6F3F7] transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
@@ -551,6 +755,7 @@ export function ProfileScreen({
             onSwitchAccount={onSwitchAccount}
           />
         )}
+        {showAccountSwitchModal && renderAccountSwitchModal()}
       </div>
     );
   }
@@ -848,6 +1053,7 @@ export function ProfileScreen({
           onSwitchAccount={onSwitchAccount}
         />
       )}
+      {showAccountSwitchModal && renderAccountSwitchModal()}
     </div>
   );
 }

@@ -395,7 +395,7 @@ export function WLProfile({
                 </div>
                 <div>
                   <div className="text-sm font-bold text-[#1B2B24]">Switch Active Health Module</div>
-                  <div className="text-xs text-[#8A9A92]">3 Modules, Cancer Awareness, or Diabetes</div>
+                  <div className="text-xs text-[#8A9A92]">Cancer Awareness, Diabetes, or Weight Loss</div>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-[#8A9A92]" />
@@ -522,7 +522,97 @@ export function WLProfile({
             </p>
 
             <div className="space-y-2.5">
-              {/* Option 1: Weight Loss */}
+              {/* Option 1: Cancer Awareness */}
+              <div 
+                id="account-switch-profile-modal-cancer"
+                data-testid="account-switch-profile-modal-cancer"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('vita_active_module', 'cancer_awareness');
+                  } catch {
+                    // storage fallback
+                  }
+                  if (onSwitchAccount) {
+                    onSwitchAccount('cancer_awareness');
+                  }
+                  setShowAccountSwitchModal(false);
+                }}
+                className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                  activeModule === 'cancer_awareness'
+                    ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                    : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                    activeModule === 'cancer_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                  }`}>
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-bold ${activeModule === 'cancer_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                      Cancer Awareness
+                    </div>
+                    <div className={`text-xs mt-0.5 tracking-tight ${activeModule === 'cancer_awareness' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
+                      Cancer Awareness & Prevention
+                    </div>
+                  </div>
+                </div>
+                {activeModule === 'cancer_awareness' ? (
+                  <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  </div>
+                ) : (
+                  <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+                )}
+              </div>
+
+              {/* Option 2: Diabetes */}
+              <div 
+                id="account-switch-profile-modal-diabetes"
+                data-testid="account-switch-profile-modal-diabetes"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('vita_active_module', 'diabetes_awareness');
+                  } catch {
+                    // storage fallback
+                  }
+                  if (onSwitchAccount) {
+                    onSwitchAccount('diabetes_awareness');
+                  }
+                  setShowAccountSwitchModal(false);
+                }}
+                className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                  activeModule === 'diabetes_awareness'
+                    ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
+                    : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                    activeModule === 'diabetes_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
+                  }`}>
+                    <Droplet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-bold ${activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
+                      Diabetes
+                    </div>
+                    <div className={`text-xs mt-0.5 tracking-tight ${activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
+                      Diabetes Management & Tracking
+                    </div>
+                  </div>
+                </div>
+                {activeModule === 'diabetes_awareness' ? (
+                  <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  </div>
+                ) : (
+                  <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
+                )}
+              </div>
+
+              {/* Option 3: Weight Loss */}
               <div 
                 id="account-switch-profile-modal-weight-loss"
                 data-testid="account-switch-profile-modal-weight-loss"
@@ -559,98 +649,6 @@ export function WLProfile({
                   </div>
                 </div>
                 {activeModule === 'weight_loss' ? (
-                  <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                ) : (
-                  <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
-                )}
-              </div>
-
-              {/* Option 2: Nutrition */}
-              <div 
-                id="account-switch-profile-modal-nutrition"
-                data-testid="account-switch-profile-modal-nutrition"
-                onClick={() => {
-                  try {
-                    localStorage.setItem('vita_active_module', 'nutrition');
-                  } catch {
-                    // storage fallback
-                  }
-                  if (onSwitchAccount) {
-                    onSwitchAccount('nutrition');
-                  }
-                  setShowAccountSwitchModal(false);
-                }}
-                className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  activeModule === 'nutrition'
-                    ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
-                    : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                    activeModule === 'nutrition' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
-                  }`}>
-                    <Utensils className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-bold ${activeModule === 'nutrition' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
-                      Nutrition
-                    </div>
-                    <div className={`text-xs mt-0.5 tracking-tight ${activeModule === 'nutrition' ? 'text-[#1F7A5C]' : 'text-[#8A9A92]'}`}>
-                      Daily Food & Macro Analysis
-                    </div>
-                  </div>
-                </div>
-                {activeModule === 'nutrition' ? (
-                  <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                ) : (
-                  <div className="w-5 h-5 rounded-full border-2 border-[#DCE6E0] shrink-0" />
-                )}
-              </div>
-
-              {/* Option 3: 3 Modules */}
-              <div 
-                id="account-switch-profile-modal-3modules"
-                data-testid="account-switch-profile-modal-3modules"
-                onClick={() => {
-                  try {
-                    localStorage.setItem('vita_active_module', 'three_modules');
-                  } catch {
-                    // storage fallback
-                  }
-                  if (onSwitchAccount) {
-                    onSwitchAccount('three_modules');
-                  }
-                  setShowAccountSwitchModal(false);
-                }}
-                className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness'
-                    ? 'border-2 border-[#1F7A5C] bg-[#EFF6F1]'
-                    : 'border-[#DCE6E0] hover:bg-[#F6FAF7]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                    activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'bg-white text-[#1F7A5C] shadow-2xs' : 'bg-[#EFF6F1] text-[#4C5F55]'
-                  }`}>
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-bold ${activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#1B2B24]'}`}>
-                      3 Modules
-                    </div>
-                    <div className={`text-xs font-semibold mt-0.5 tracking-tight ${
-                      activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? 'text-[#1F7A5C]' : 'text-[#4C5F55]'
-                    }`}>
-                      Cancer Awareness • Diabetes • Weight Loss
-                    </div>
-                  </div>
-                </div>
-                {activeModule === 'three_modules' || activeModule === '3_modules' || activeModule === 'cancer_awareness' || activeModule === 'diabetes_awareness' ? (
                   <div className="w-5 h-5 rounded-full bg-[#1F7A5C] text-white flex items-center justify-center shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>

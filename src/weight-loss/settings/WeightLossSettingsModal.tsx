@@ -17,25 +17,25 @@ export interface AccountSwitchOption {
 
 export const ACCOUNT_SWITCH_OPTIONS: AccountSwitchOption[] = [
   {
+    id: 'cancer_awareness',
+    key: 'cancer_awareness',
+    title: 'Cancer Awareness',
+    subtitle: 'Cancer Awareness & Prevention',
+    icon: Shield,
+  },
+  {
+    id: 'diabetes_awareness',
+    key: 'diabetes',
+    title: 'Diabetes',
+    subtitle: 'Diabetes Management & Tracking',
+    icon: Droplet,
+  },
+  {
     id: 'weight_loss',
     key: 'weight_loss',
     title: 'Weight Loss',
     subtitle: 'Weight Tracking & Calorie Deficit',
     icon: Scale,
-  },
-  {
-    id: 'nutrition',
-    key: 'nutrition',
-    title: 'Nutrition',
-    subtitle: 'Daily Food & Macro Analysis',
-    icon: Utensils,
-  },
-  {
-    id: 'three_modules',
-    key: '3modules',
-    title: '3 Modules',
-    subtitle: 'Cancer Awareness • Diabetes • Weight Loss',
-    icon: Sparkles,
   },
 ];
 
@@ -172,14 +172,7 @@ export function WeightLossSettingsModal({
           <div className="space-y-2.5">
             {ACCOUNT_SWITCH_OPTIONS.map((option) => {
               const Icon = option.icon;
-              const isSelected =
-                (option.id === 'three_modules' && (
-                  currentModule === 'three_modules' || 
-                  currentModule === '3_modules' ||
-                  currentModule === 'cancer_awareness' ||
-                  currentModule === 'diabetes_awareness'
-                )) ||
-                currentModule === option.id;
+              const isSelected = currentModule === option.id;
 
               return (
                 <div

@@ -35,19 +35,17 @@ export function getPersistedActiveModule(): ActiveModule {
   try {
     const saved = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY) as ActiveModule | null;
     if (
-      saved === 'weight_loss' ||
-      saved === 'nutrition' ||
-      saved === 'three_modules' ||
-      saved === '3_modules' ||
       saved === 'cancer_awareness' ||
-      saved === 'diabetes_awareness'
+      saved === 'diabetes_awareness' ||
+      saved === 'weight_loss' ||
+      saved === 'nutrition'
     ) {
-      return saved === '3_modules' ? 'three_modules' : saved;
+      return saved;
     }
   } catch {
     // Storage access fallback
   }
-  return 'three_modules';
+  return 'cancer_awareness';
 }
 
 export function getPersistedThreeModulesSub(): 'weight_loss' | 'cancer_awareness' | 'diabetes_awareness' {
@@ -87,25 +85,10 @@ export default function App() {
 
   const handleSwitchModule = (mod: ActiveModule) => {
     const normalizedMod = mod === '3_modules' ? 'three_modules' : mod;
-    if (normalizedMod === 'cancer_awareness' || normalizedMod === 'diabetes_awareness') {
-      setActiveModule('three_modules');
-      persistActiveModule('three_modules');
-      setThreeModulesSub(normalizedMod);
-      try {
-        localStorage.setItem(THREE_MODULES_SUB_STORAGE_KEY, normalizedMod);
-      } catch {
-        // Storage access fallback
-      }
-      setActiveTab('home');
-      return;
-    }
-
     setActiveModule(normalizedMod);
     persistActiveModule(normalizedMod);
 
-    if (normalizedMod === 'three_modules') {
-      setActiveTab('home');
-    } else if (normalizedMod === 'nutrition') {
+    if (normalizedMod === 'nutrition') {
       setActiveTab('history');
     } else {
       setActiveTab('home');
